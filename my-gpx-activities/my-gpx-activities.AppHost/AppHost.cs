@@ -1,7 +1,14 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
+var postgres = builder.AddPostgres("postgres")
+    .WithPgAdmin()
+    .AddDatabase("gpxactivities");
+
 var apiService = builder.AddProject<Projects.my_gpx_activities_ApiService>("apiservice")
-    .WithHttpHealthCheck("/health");
+    .WithHttpHealthCheck("/health")
+    .WithExternalHttpEndpoints()
+    .WithReference(postgres)
+    .WaitFor(postgres);
 
 builder.AddProject<Projects.webapp>("webfrontend")
     .WithExternalHttpEndpoints()
