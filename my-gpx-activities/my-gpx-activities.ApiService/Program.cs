@@ -5,47 +5,30 @@ using my_gpx_activities.ApiService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Kestrel file upload limits (10MB for GPX files)
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = 10 * 1024 * 1024; // 10MB
 });
 
-// Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
-
-// Add Aspire PostgreSQL client
 builder.AddNpgsqlDataSource("gpxactivities");
 
-// Register database connection factory
 builder.Services.AddScoped<IDatabaseConnectionFactory, DatabaseConnectionFactory>();
-
-// Register database initializer
 builder.Services.AddScoped<IDatabaseInitializer, DatabaseInitializer>();
-
-// Register repositories
 builder.Services.AddScoped<IActivityRepository, ActivityRepository>();
 builder.Services.AddScoped<IActivityTypeRepository, ActivityTypeRepository>();
-
-// Register services
 builder.Services.AddScoped<IGpxParserService, GpxParserService>();
-
-// Add services to the container.
 builder.Services.AddProblemDetails();
-
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// Initialize database schema on startup
 using (var scope = app.Services.CreateScope())
 {
     var dbInitializer = scope.ServiceProvider.GetRequiredService<IDatabaseInitializer>();
     await dbInitializer.InitializeAsync();
 }
 
-// Configure the HTTP request pipeline.
 app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
@@ -55,9 +38,6 @@ if (app.Environment.IsDevelopment())
 
 app.MapGet("/", () => "GPX Activities API is running. Use /api endpoints for activity management.");
 
-// API Endpoints
-
-// Activity Types
 app.MapGet("/api/activity-types", async (IActivityTypeRepository repository) =>
 {
     var activityTypes = await repository.GetAllActivityTypesAsync();
@@ -65,7 +45,6 @@ app.MapGet("/api/activity-types", async (IActivityTypeRepository repository) =>
 })
 .WithName("GetActivityTypes");
 
-// GPX Import
 app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserService gpxParser, IActivityRepository activityRepository) =>
 {
     try
@@ -83,16 +62,13 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
             return Results.BadRequest("File must be a GPX file");
         }
 
-        // Parse GPX file
         await using var stream = file.OpenReadStream();
         var activityData = await gpxParser.ParseGpxAsync(stream);
 
-        // Extract track coordinates for map display [lat, lon]
         var trackCoordinates = activityData.TrackPoints
             .Select(tp => new[] { tp.Latitude, tp.Longitude })
             .ToList();
 
-        // Create activity entity
         var activity = new Activity
         {
             Id = Guid.NewGuid(),
@@ -110,10 +86,8 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
             CreatedAt = DateTime.UtcNow
         };
 
-        // Save to database
         await activityRepository.CreateActivityAsync(activity);
 
-        // Return response with coordinates as array (for frontend)
         var response = new
         {
             activity.Id,
@@ -140,12 +114,10 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
 })
 .WithName("ImportGpxActivity");
 
-// Activities
 app.MapGet("/api/activities", async (IActivityRepository repository) =>
 {
     var activities = await repository.GetAllActivitiesAsync();
-    
-    // Map to response DTOs
+
     var response = activities.Select(a => new
     {
         a.Id,
@@ -161,7 +133,7 @@ app.MapGet("/api/activities", async (IActivityRepository repository) =>
         TrackPoints = a.TrackPointCount,
         a.CreatedAt
     });
-    
+
     return Results.Ok(response);
 })
 .WithName("GetActivities");
@@ -169,13 +141,12 @@ app.MapGet("/api/activities", async (IActivityRepository repository) =>
 app.MapGet("/api/activities/{id}", async (Guid id, IActivityRepository repository) =>
 {
     var activity = await repository.GetActivityByIdAsync(id);
-    
+
     if (activity == null)
     {
         return Results.NotFound();
     }
 
-    // Parse track coordinates from JSON
     List<double[]>? trackCoordinates = null;
     if (!string.IsNullOrEmpty(activity.TrackCoordinatesJson))
     {
@@ -212,4 +183,4 @@ app.MapDelete("/api/activities/{id}", async (Guid id, IActivityRepository reposi
 
 app.MapDefaultEndpoints();
 
-app.Run();
+await app.RunAsync();

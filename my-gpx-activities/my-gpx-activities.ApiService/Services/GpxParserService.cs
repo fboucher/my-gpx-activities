@@ -41,8 +41,6 @@ public class GpxParserService : IGpxParserService
 
         var doc = XDocument.Parse(gpxContent);
 
-        // Extract basic metadata
-        var metadata = doc.Root?.Element(XName.Get("metadata", "http://www.topografix.com/GPX/1/1"));
         var title = doc.Root?.Element(XName.Get("trk", "http://www.topografix.com/GPX/1/1"))
                           ?.Element(XName.Get("name", "http://www.topografix.com/GPX/1/1"))?.Value
                    ?? "Untitled Activity";
@@ -51,7 +49,6 @@ public class GpxParserService : IGpxParserService
                              ?.Element(XName.Get("type", "http://www.topografix.com/GPX/1/1"))?.Value
                         ?? "Unknown";
 
-        // Extract track points
         var trackPoints = new List<GpxTrackPoint>();
         var trackSegments = doc.Root?.Elements(XName.Get("trk", "http://www.topografix.com/GPX/1/1"))
                               .SelectMany(trk => trk.Elements(XName.Get("trkseg", "http://www.topografix.com/GPX/1/1")));
@@ -68,7 +65,6 @@ public class GpxParserService : IGpxParserService
             }
         }
 
-        // Calculate activity metrics
         var activityData = CalculateActivityMetrics(title, activityType, trackPoints);
         activityData.RawGpxData = gpxContent;
 
@@ -85,7 +81,6 @@ public class GpxParserService : IGpxParserService
             var elevation = trkpt.Element(XName.Get("ele", "http://www.topografix.com/GPX/1/1"));
             var time = trkpt.Element(XName.Get("time", "http://www.topografix.com/GPX/1/1"));
 
-            // Parse Garmin extensions for heart rate and cadence
             int? heartRate = null;
             int? cadence = null;
 
@@ -121,7 +116,7 @@ public class GpxParserService : IGpxParserService
         }
         catch
         {
-            return null; // Skip invalid track points
+            return null;
         }
     }
 
@@ -155,7 +150,6 @@ public class GpxParserService : IGpxParserService
         var startTime = validPoints.First().Time!.Value;
         var endTime = validPoints.Last().Time!.Value;
 
-        // Calculate distance using Haversine formula
         double totalDistance = 0;
         for (int i = 1; i < validPoints.Count; i++)
         {
@@ -164,7 +158,6 @@ public class GpxParserService : IGpxParserService
             totalDistance += CalculateDistance(prev.Latitude, prev.Longitude, curr.Latitude, curr.Longitude);
         }
 
-        // Calculate elevation gain/loss
         double elevationGain = 0;
         double elevationLoss = 0;
         for (int i = 1; i < validPoints.Count; i++)
@@ -182,9 +175,8 @@ public class GpxParserService : IGpxParserService
             }
         }
 
-        // Calculate speeds
         var duration = endTime - startTime;
-        var averageSpeed = totalDistance / duration.TotalSeconds; // meters per second
+        var averageSpeed = totalDistance / duration.TotalSeconds;
         var maxSpeed = validPoints.Any(p => p.Time.HasValue)
             ? validPoints.Zip(validPoints.Skip(1), (a, b) =>
             {
@@ -212,17 +204,13 @@ public class GpxParserService : IGpxParserService
 
     private double CalculateDistance(double lat1, double lon1, double lat2, double lon2)
     {
-        const double R = 6371000; // Earth's radius in meters
-
+        const double R = 6371000;
         var dLat = ToRadians(lat2 - lat1);
         var dLon = ToRadians(lon2 - lon1);
-
         var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
                 Math.Cos(ToRadians(lat1)) * Math.Cos(ToRadians(lat2)) *
                 Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-
         var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-
         return R * c;
     }
 
