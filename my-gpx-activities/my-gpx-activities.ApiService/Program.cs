@@ -181,6 +181,14 @@ app.MapDelete("/api/activities/{id}", async (Guid id, IActivityRepository reposi
 })
 .WithName("DeleteActivity");
 
+app.MapGet("/api/statistics/by-sport", async (IActivityRepository repository) =>
+{
+    var statistics = await repository.GetStatisticsBySportAsync();
+    return Results.Ok(statistics);
+})
+.WithName("GetStatisticsBySport")
+.WithDescription("Get aggregated statistics grouped by sport type");
+
 app.MapDefaultEndpoints();
 
 await app.RunAsync();

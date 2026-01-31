@@ -9,6 +9,7 @@ public interface IActivityRepository
     Task<Guid> CreateActivityAsync(Activity activity);
     Task<bool> UpdateActivityAsync(Activity activity);
     Task<bool> DeleteActivityAsync(Guid id);
+    Task<IEnumerable<SportStatistics>> GetStatisticsBySportAsync();
 }
 
 public interface IActivityTypeRepository

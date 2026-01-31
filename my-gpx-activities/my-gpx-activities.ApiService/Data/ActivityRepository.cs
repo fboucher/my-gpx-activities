@@ -167,6 +167,42 @@ public class ActivityRepository : IActivityRepository
         return rowsAffected > 0;
     }
 
+    public async Task<IEnumerable<SportStatistics>> GetStatisticsBySportAsync()
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync();
+
+        var stats = await connection.QueryAsync<SportStatisticsDto>("""
+            SELECT 
+                a.activity_type as sport_name,
+                at.icon,
+                at.color,
+                COUNT(*) as total_activities,
+                SUM(a.distance_meters) as total_distance_meters,
+                SUM(EXTRACT(EPOCH FROM (a.end_date_time - a.start_date_time))) as total_duration_seconds,
+                AVG(a.average_speed_ms) as average_speed_ms,
+                MAX(a.max_speed_ms) as max_speed_ms,
+                MAX(EXTRACT(EPOCH FROM (a.end_date_time - a.start_date_time))) as max_duration_seconds,
+                SUM(a.elevation_gain_meters) as total_elevation_gain_meters
+            FROM activities a
+            LEFT JOIN activity_types at ON a.activity_type = at.name
+            GROUP BY a.activity_type, at.icon, at.color
+            ORDER BY total_activities DESC
+            """);
+
+        return stats.Select(dto => new SportStatistics(
+            dto.Sport_Name ?? "Unknown",
+            dto.Icon,
+            dto.Color,
+            dto.Total_Activities,
+            dto.Total_Distance_Meters,
+            dto.Total_Duration_Seconds,
+            dto.Average_Speed_Ms,
+            dto.Max_Speed_Ms,
+            dto.Max_Duration_Seconds,
+            dto.Total_Elevation_Gain_Meters
+        ));
+    }
+
     private static Activity MapToActivity(ActivityDto dto)
     {
         return new Activity
@@ -203,5 +239,19 @@ public class ActivityRepository : IActivityRepository
         public int Track_Point_Count { get; set; }
         public string? Track_Coordinates_Json { get; set; }
         public DateTime Created_At { get; set; }
+    }
+
+    private class SportStatisticsDto
+    {
+        public string? Sport_Name { get; set; }
+        public string? Icon { get; set; }
+        public string? Color { get; set; }
+        public int Total_Activities { get; set; }
+        public double Total_Distance_Meters { get; set; }
+        public double Total_Duration_Seconds { get; set; }
+        public double Average_Speed_Ms { get; set; }
+        public double Max_Speed_Ms { get; set; }
+        public double Max_Duration_Seconds { get; set; }
+        public double Total_Elevation_Gain_Meters { get; set; }
     }
 }
