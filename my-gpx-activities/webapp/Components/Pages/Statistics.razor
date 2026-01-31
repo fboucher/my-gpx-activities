@@ -1,0 +1,121 @@
+@page "/statistics"
+@using System.Net.Http.Json
+@inject IHttpClientFactory HttpClientFactory
+@inject ISnackbar Snackbar
+
+<PageTitle>Sport Statistics</PageTitle>
+
+<MudText Typo="Typo.h3" GutterBottom="true">Global Statistics by Sport</MudText>
+<MudText Class="mb-8">View aggregated statistics across all activities grouped by sport type.</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+}
+else if (_error != null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_statistics == null || !_statistics.Any())
+{
+    <MudAlert Severity="Severity.Info">No statistics available. Import some GPX activities first.</MudAlert>
+}
+else
+{
+    <MudGrid>
+        @foreach (var stat in _statistics)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard>
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h5">
+                                @if (!string.IsNullOrEmpty(stat.Icon))
+                                {
+                                    <span>@stat.Icon</span>
+                                }
+                                @stat.SportName
+                            </MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            <strong>Total Activities:</strong> @stat.TotalActivities
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            <strong>Total Distance:</strong> @stat.TotalDistanceKm.ToString("F2") km
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            <strong>Total Duration:</strong> @FormatDuration(stat.TotalDuration)
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            <strong>Avg Speed:</strong> @stat.AverageSpeedKmh.ToString("F2") km/h
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            <strong>Max Speed:</strong> @stat.MaxSpeedKmh.ToString("F2") km/h
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            <strong>Max Duration:</strong> @FormatDuration(stat.MaxDuration)
+                        </MudText>
+                        <MudText Typo="Typo.body2">
+                            <strong>Total Elevation:</strong> @stat.TotalElevationGainMeters.ToString("F0") m
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private List<SportStatisticsDto>? _statistics;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            using var client = HttpClientFactory.CreateClient("ApiService");
+            _statistics = await client.GetFromJsonAsync<List<SportStatisticsDto>>("/api/statistics/by-sport");
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load statistics: {ex.Message}";
+            Snackbar.Add(_error, Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalHours >= 1)
+        {
+            return $"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}";
+        }
+        return $"{duration.Minutes:D2}:{duration.Seconds:D2}";
+    }
+
+    public class SportStatisticsDto
+    {
+        public string SportName { get; set; } = string.Empty;
+        public string? Icon { get; set; }
+        public string? Color { get; set; }
+        public int TotalActivities { get; set; }
+        public double TotalDistanceMeters { get; set; }
+        public double TotalDurationSeconds { get; set; }
+        public double AverageSpeedMs { get; set; }
+        public double MaxSpeedMs { get; set; }
+        public double MaxDurationSeconds { get; set; }
+        public double TotalElevationGainMeters { get; set; }
+
+        public double TotalDistanceKm => TotalDistanceMeters / 1000.0;
+        public double AverageSpeedKmh => AverageSpeedMs * 3.6;
+        public double MaxSpeedKmh => MaxSpeedMs * 3.6;
+        public TimeSpan TotalDuration => TimeSpan.FromSeconds(TotalDurationSeconds);
+        public TimeSpan MaxDuration => TimeSpan.FromSeconds(MaxDurationSeconds);
+    }
+}

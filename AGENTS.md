@@ -273,5 +273,4 @@ string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "
 - **Testing Framework**: NUnit 4.x
 - **Web Framework**: ASP.NET Core with Blazor Server
 - **API Documentation**: OpenAPI/Swagger (development only)
-- **Observability**: OpenTelemetry with OTLP exporter support</content>
-<parameter name="filePath">/home/frank/gh/my-gpx-activities/AGENTS.md
+- **Observability**: OpenTelemetry with OTLP exporter support

@@ -1,0 +1,315 @@
+@page "/import"
+
+<PageTitle>Import GPX Files</PageTitle>
+
+<MudText Typo="Typo.h3" GutterBottom="true">Import GPX Files</MudText>
+
+<MudText Class="mb-4">
+    Upload your GPX files to analyze your GPS activities. You can view routes on interactive maps and examine detailed analytics.
+</MudText>
+
+<MudCard Class="pa-4">
+    <MudCardContent>
+        <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                       FilesChanged="HandleFilesChanged"
+                       Accept=".gpx"
+                       MaximumFileCount="10"
+                       Class="mb-4">
+            <ActivatorContent>
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          StartIcon="@Icons.Material.Filled.CloudUpload"
+                          Size="Size.Large">
+                    Choose GPX Files
+                </MudButton>
+            </ActivatorContent>
+            <SelectedTemplate>
+                @if (context != null && context.Any())
+                {
+                    <MudText Typo="Typo.body1" Class="mb-2">
+                        @context.Count file(s) selected for upload (@FormatTotalSize(context))
+                    </MudText>
+                    @foreach (var file in context)
+                    {
+                        <MudChip T="string"
+                                Text="@(file.Name + $" ({FormatFileSize(file.Size)})")"
+                                Size="Size.Small"
+                                Color="@GetFileColor(file)"
+                                Variant="Variant.Outlined"
+                                Class="mr-2 mb-2" />
+                    }
+                }
+            </SelectedTemplate>
+        </MudFileUpload>
+
+        <MudButton Variant="Variant.Filled"
+                  Color="Color.Success"
+                  StartIcon="@Icons.Material.Filled.Upload"
+                  Size="Size.Large"
+                  Disabled="@(selectedFiles == null || !selectedFiles.Any() || isUploading)"
+                  OnClick="UploadFiles">
+            @if (isUploading)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ms-2">Uploading...</MudText>
+            }
+            else
+            {
+                <MudText>Upload Files</MudText>
+            }
+        </MudButton>
+    </MudCardContent>
+</MudCard>
+
+@if (uploadedActivities.Any())
+{
+    <MudCard Class="mt-4">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h5">Uploaded Activities</MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            @foreach (var activity in uploadedActivities.OrderByDescending(a => a.CreatedAt))
+            {
+                <MudPaper Class="pa-3 mb-3" Elevation="1">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.h6">@activity.Title</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Info">@activity.ActivityType</MudText>
+                            <MudText Typo="Typo.caption">
+                                @activity.StartDateTime.ToString("g") - @activity.EndDateTime.ToString("t")
+                            </MudText>
+                        </MudStack>
+                        <MudStack Spacing="1" AlignItems="AlignItems.End">
+                            <MudText Typo="Typo.body2">
+                                <MudIcon Icon="@Icons.Material.Filled.Straighten" Size="Size.Small" />
+                                @FormatDistance(activity.DistanceMeters)
+                            </MudText>
+                            <MudText Typo="Typo.body2">
+                                <MudIcon Icon="@Icons.Material.Filled.Terrain" Size="Size.Small" />
+                                +@FormatElevation(activity.ElevationGainMeters)
+                            </MudText>
+                            <MudText Typo="Typo.body2">
+                                <MudIcon Icon="@Icons.Material.Filled.Speed" Size="Size.Small" />
+                                @FormatSpeed(activity.AverageSpeedMs)
+                            </MudText>
+                        </MudStack>
+                    </MudStack>
+                    <MudDivider Class="my-2" />
+                    <MudStack Row="true" Justify="Justify.SpaceBetween">
+                        <MudText Typo="Typo.caption">@activity.TrackPoints track points</MudText>
+                        <MudButton Variant="Variant.Text"
+                                  Color="Color.Primary"
+                                  Size="Size.Small"
+                                  Href="@($"/activities/{activity.Id}")">
+                            View Details
+                        </MudButton>
+                    </MudStack>
+                </MudPaper>
+            }
+        </MudCardContent>
+    </MudCard>
+}
+
+@inject IHttpClientFactory HttpClientFactory
+@inject ISnackbar Snackbar
+@inject webapp.Services.ActivityStore ActivityStore
+
+@code {
+    private IReadOnlyList<IBrowserFile>? selectedFiles;
+    private List<webapp.Services.ActivitySummary> uploadedActivities = new();
+    private bool isUploading;
+
+    private void HandleFilesChanged(IReadOnlyList<IBrowserFile> files)
+    {
+        selectedFiles = files;
+        StateHasChanged();
+    }
+
+    private async Task UploadFiles()
+    {
+        if (selectedFiles == null || !selectedFiles.Any())
+            return;
+
+        isUploading = true;
+        StateHasChanged();
+
+        try
+        {
+            foreach (var file in selectedFiles)
+            {
+                await UploadFile(file);
+            }
+
+            Snackbar.Add($"{selectedFiles.Count} file(s) uploaded successfully", Severity.Success);
+            selectedFiles = null;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Upload failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isUploading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UploadFile(IBrowserFile file)
+    {
+        try
+        {
+            // Validate file size (10MB limit)
+            if (file.Size > 10 * 1024 * 1024)
+            {
+                throw new Exception($"File {file.Name} is too large. Maximum size is 10MB.");
+            }
+
+            // Validate file extension
+            if (!file.Name.EndsWith(".gpx", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new Exception($"File {file.Name} is not a valid GPX file.");
+            }
+
+            using var client = HttpClientFactory.CreateClient("ApiService");
+            using var content = new MultipartFormDataContent();
+            // OpenReadStream requires maxAllowedSize parameter for files > 512KB
+            using var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024));
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+            content.Add(fileContent, "gpx", file.Name);
+
+            var response = await client.PostAsync("api/activities/import", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var activity = await response.Content.ReadFromJsonAsync<webapp.Services.ActivitySummary>();
+                if (activity != null)
+                {
+                    uploadedActivities.Add(activity);
+                    ActivityStore.Add(activity); // Add to shared store
+                }
+                else
+                {
+                    throw new Exception($"Invalid response format for {file.Name}");
+                }
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                var errorMessage = $"Failed to process {file.Name}";
+
+                if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                {
+                    errorMessage += ": Invalid GPX file or format";
+                }
+                else if (response.StatusCode == System.Net.HttpStatusCode.RequestEntityTooLarge)
+                {
+                    errorMessage += ": File too large for server";
+                }
+                else if (response.StatusCode == System.Net.HttpStatusCode.InternalServerError)
+                {
+                    errorMessage += ": Server error processing file";
+                }
+                else
+                {
+                    errorMessage += $": {response.StatusCode}";
+                }
+
+                if (!string.IsNullOrEmpty(errorContent))
+                {
+                    try
+                    {
+                        var problemDetails = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(errorContent);
+                        if (problemDetails.TryGetProperty("detail", out var detail))
+                        {
+                            errorMessage += $" - {detail.GetString()}";
+                        }
+                    }
+                    catch
+                    {
+                        // If we can't parse the error, just use the raw content
+                        errorMessage += $" - {errorContent}";
+                    }
+                }
+
+                throw new Exception(errorMessage);
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new Exception($"Network error uploading {file.Name}: {ex.Message}");
+        }
+        catch (Exception ex) when (ex.Message.Contains("too large") || ex.Message.Contains("size"))
+        {
+            throw; // Re-throw file size errors as-is
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Error uploading {file.Name}: {ex.Message}");
+        }
+    }
+
+    private string FormatDistance(double meters)
+    {
+        if (meters >= 1000)
+        {
+            return $"{meters / 1000:F1} km";
+        }
+        return $"{meters:F0} m";
+    }
+
+    private string FormatElevation(double meters)
+    {
+        return $"{meters:F0} m";
+    }
+
+    private string FormatSpeed(double metersPerSecond)
+    {
+        var kmh = metersPerSecond * 3.6;
+        return $"{kmh:F1} km/h";
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        const long KB = 1024;
+        const long MB = KB * 1024;
+
+        if (bytes >= MB)
+        {
+            return $"{bytes / (double)MB:F1} MB";
+        }
+        else if (bytes >= KB)
+        {
+            return $"{bytes / (double)KB:F1} KB";
+        }
+        else
+        {
+            return $"{bytes} bytes";
+        }
+    }
+
+    private string FormatTotalSize(IEnumerable<IBrowserFile> files)
+    {
+        var totalBytes = files.Sum(f => f.Size);
+        return FormatFileSize(totalBytes);
+    }
+
+    private Color GetFileColor(IBrowserFile file)
+    {
+        const long MB = 1024 * 1024;
+        if (file.Size > 5 * MB)
+        {
+            return Color.Warning; // Large files (warning)
+        }
+        else if (file.Size > 1 * MB)
+        {
+            return Color.Info; // Medium files
+        }
+        else
+        {
+            return Color.Success; // Small files
+        }
+    }
+
+}

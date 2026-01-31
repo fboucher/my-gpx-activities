@@ -22,6 +22,12 @@ public static class Extensions
     {
         builder.ConfigureOpenTelemetry();
 
+        // Configure file upload limits for web applications
+        builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+        {
+            options.MultipartBodyLengthLimit = 10 * 1024 * 1024; // 10MB
+        });
+
         builder.AddDefaultHealthChecks();
 
         builder.Services.AddServiceDiscovery();

@@ -1,0 +1,265 @@
+@page "/activities/{id:guid}"
+@attribute [StreamRendering(true)]
+
+<PageTitle>Activity Details</PageTitle>
+
+@if (activity == null)
+{
+    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="py-8">
+        <MudProgressCircular Size="Size.Large" Indeterminate="true" />
+        <MudText Typo="Typo.body1" Class="mt-4">Loading activity...</MudText>
+    </MudStack>
+}
+else if (!string.IsNullOrEmpty(errorMessage))
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">
+        @errorMessage
+    </MudAlert>
+}
+else
+{
+    <MudText Typo="Typo.h3" GutterBottom="true">@activity.Title</MudText>
+
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-3 text-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Large" Color="Color.Primary" />
+                <MudText Typo="Typo.h6" Class="mt-2">Duration</MudText>
+                <MudText Typo="Typo.h4">@FormatDuration(activity.StartDateTime, activity.EndDateTime)</MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-3 text-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.Straighten" Size="Size.Large" Color="Color.Success" />
+                <MudText Typo="Typo.h6" Class="mt-2">Distance</MudText>
+                <MudText Typo="Typo.h4">@FormatDistance(activity.DistanceMeters)</MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-3 text-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.Terrain" Size="Size.Large" Color="Color.Warning" />
+                <MudText Typo="Typo.h6" Class="mt-2">Elevation Gain</MudText>
+                <MudText Typo="Typo.h4">+@FormatElevation(activity.ElevationGainMeters)</MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-3 text-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.Speed" Size="Size.Large" Color="Color.Info" />
+                <MudText Typo="Typo.h6" Class="mt-2">Avg Speed</MudText>
+                <MudText Typo="Typo.h4">@FormatSpeed(activity.AverageSpeedMs)</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudCard Class="mb-4">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h5">Route Map</MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            <div id="map" style="height: 400px; width: 100%; border-radius: 4px;"></div>
+        </MudCardContent>
+    </MudCard>
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudCard>
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Activity Details</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudSimpleTable Dense="true" Hover="true">
+                        <tbody>
+                            <tr>
+                                <td><strong>Activity Type</strong></td>
+                                <td>@activity.ActivityType</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Start Time</strong></td>
+                                <td>@activity.StartDateTime.ToString("g")</td>
+                            </tr>
+                            <tr>
+                                <td><strong>End Time</strong></td>
+                                <td>@activity.EndDateTime.ToString("g")</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Max Speed</strong></td>
+                                <td>@FormatSpeed(activity.MaxSpeedMs)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Elevation Loss</strong></td>
+                                <td>-@FormatElevation(activity.ElevationLossMeters)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Track Points</strong></td>
+                                <td>@activity.TrackPoints.ToString("N0")</td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard>
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Actions</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudStack Spacing="2">
+                        <MudButton Variant="Variant.Outlined"
+                                  Color="Color.Primary"
+                                  StartIcon="@Icons.Material.Filled.Download"
+                                  FullWidth="true">
+                            Export GPX
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined"
+                                  Color="Color.Secondary"
+                                  StartIcon="@Icons.Material.Filled.Edit"
+                                  FullWidth="true">
+                            Edit Activity
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined"
+                                  Color="Color.Error"
+                                  StartIcon="@Icons.Material.Filled.Delete"
+                                  FullWidth="true">
+                            Delete Activity
+                        </MudButton>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+}
+
+<MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-4">
+    <MudButton Variant="Variant.Text"
+              Color="Color.Primary"
+              StartIcon="@Icons.Material.Filled.ArrowBack"
+              Href="/activities">
+        Back to Activities
+    </MudButton>
+    <MudButton Variant="Variant.Filled"
+              Color="Color.Primary"
+              StartIcon="@Icons.Material.Filled.CloudUpload"
+              Href="/import">
+        Import New Activity
+    </MudButton>
+</MudStack>
+
+@inject webapp.Services.ActivityStore ActivityStore
+@inject IJSRuntime JSRuntime
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private ActivityViewModel? activity;
+    private string? errorMessage;
+
+    protected override void OnInitialized()
+    {
+        LoadActivity();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && activity != null)
+        {
+            await InitializeMap();
+        }
+    }
+
+    private void LoadActivity()
+    {
+        var storedActivity = ActivityStore.GetById(Id);
+        
+        if (storedActivity == null)
+        {
+            errorMessage = "Activity not found. It may have been deleted or you may need to import it again.";
+            return;
+        }
+
+        activity = new ActivityViewModel
+        {
+            Id = storedActivity.Id,
+            Title = storedActivity.Title,
+            StartDateTime = storedActivity.StartDateTime,
+            EndDateTime = storedActivity.EndDateTime,
+            ActivityType = storedActivity.ActivityType,
+            DistanceMeters = storedActivity.DistanceMeters,
+            ElevationGainMeters = storedActivity.ElevationGainMeters,
+            ElevationLossMeters = storedActivity.ElevationLossMeters,
+            AverageSpeedMs = storedActivity.AverageSpeedMs,
+            MaxSpeedMs = storedActivity.MaxSpeedMs,
+            TrackPoints = storedActivity.TrackPoints,
+            TrackCoordinates = storedActivity.TrackCoordinates
+        };
+    }
+
+    private async Task InitializeMap()
+    {
+        try
+        {
+            if (activity?.TrackCoordinates != null && activity.TrackCoordinates.Any())
+            {
+                await JSRuntime.InvokeVoidAsync("initializeMap", activity.TrackCoordinates);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Map initialization failed - could show a fallback message
+            Console.WriteLine($"Map initialization failed: {ex.Message}");
+        }
+    }
+
+    private string FormatDistance(double meters)
+    {
+        if (meters >= 1000)
+        {
+            return $"{meters / 1000:F2} km";
+        }
+        return $"{meters:F0} m";
+    }
+
+    private string FormatElevation(double meters)
+    {
+        return $"{meters:F1} m";
+    }
+
+    private string FormatSpeed(double metersPerSecond)
+    {
+        var kmh = metersPerSecond * 3.6;
+        return $"{kmh:F1} km/h";
+    }
+
+    private string FormatDuration(DateTime start, DateTime end)
+    {
+        var duration = end - start;
+        return $"{(int)duration.TotalHours}:{duration.Minutes:D2}:{duration.Seconds:D2}";
+    }
+
+    public class ActivityViewModel
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public DateTime StartDateTime { get; set; }
+        public DateTime EndDateTime { get; set; }
+        public string ActivityType { get; set; } = string.Empty;
+        public double DistanceMeters { get; set; }
+        public double ElevationGainMeters { get; set; }
+        public double ElevationLossMeters { get; set; }
+        public double AverageSpeedMs { get; set; }
+        public double MaxSpeedMs { get; set; }
+        public int TrackPoints { get; set; }
+        public List<double[]>? TrackCoordinates { get; set; }
+    }
+}

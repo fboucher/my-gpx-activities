@@ -1,0 +1,167 @@
+@page "/activities"
+@attribute [StreamRendering(true)]
+
+<PageTitle>Activities</PageTitle>
+
+<MudText Typo="Typo.h3" GutterBottom="true">My Activities</MudText>
+
+@if (activities == null)
+{
+    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="py-8">
+        <MudProgressCircular Size="Size.Large" Indeterminate="true" />
+        <MudText Typo="Typo.body1" Class="mt-4">Loading activities...</MudText>
+    </MudStack>
+}
+else if (!activities.Any())
+{
+    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="py-8">
+        <MudIcon Icon="@Icons.Material.Filled.Route" Size="Size.Large" Color="Color.Info" />
+        <MudText Typo="Typo.h5" Class="mt-4">No activities yet</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+            Import your first GPX file to get started!
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                  Color="Color.Primary"
+                  StartIcon="@Icons.Material.Filled.CloudUpload"
+                  Href="/import"
+                  Class="mt-4">
+            Import GPX File
+        </MudButton>
+    </MudStack>
+}
+else
+{
+    <MudDataGrid T="ActivitySummary"
+                Items="activities"
+                SortMode="SortMode.Multiple"
+                Filterable="false"
+                Striped="true"
+                Bordered="true"
+                Dense="true"
+                Class="mb-4">
+        <Columns>
+            <PropertyColumn Property="x => x.StartDateTime" Title="Date" SortBy="x => x.StartDateTime">
+                <CellTemplate>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2">@context.Item.StartDateTime.ToString("MMM dd, yyyy")</MudText>
+                        <MudText Typo="Typo.caption">@context.Item.StartDateTime.ToString("HH:mm")</MudText>
+                    </MudStack>
+                </CellTemplate>
+            </PropertyColumn>
+
+            <PropertyColumn Property="x => x.Title" Title="Activity" SortBy="x => x.Title">
+                <CellTemplate>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2">@context.Item.Title</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Info">@context.Item.ActivityType</MudText>
+                    </MudStack>
+                </CellTemplate>
+            </PropertyColumn>
+
+            <PropertyColumn Property="x => x.DistanceMeters" Title="Distance" SortBy="x => x.DistanceMeters">
+                <CellTemplate>
+                    <MudText Typo="Typo.body2">@FormatDistance(context.Item.DistanceMeters)</MudText>
+                </CellTemplate>
+            </PropertyColumn>
+
+            <PropertyColumn Property="x => x.ElevationGainMeters" Title="Elevation" SortBy="x => x.ElevationGainMeters">
+                <CellTemplate>
+                    <MudText Typo="Typo.body2">
+                        <MudIcon Icon="@Icons.Material.Filled.Terrain" Size="Size.Small" />
+                        +@FormatElevation(context.Item.ElevationGainMeters)
+                    </MudText>
+                </CellTemplate>
+            </PropertyColumn>
+
+            <PropertyColumn Property="x => x.AverageSpeedMs" Title="Avg Speed" SortBy="x => x.AverageSpeedMs">
+                <CellTemplate>
+                    <MudText Typo="Typo.body2">@FormatSpeed(context.Item.AverageSpeedMs)</MudText>
+                </CellTemplate>
+            </PropertyColumn>
+
+            <PropertyColumn Property="x => x.EndDateTime.Subtract(x.StartDateTime)" Title="Duration">
+                <CellTemplate>
+                    <MudText Typo="Typo.body2">@FormatDuration(context.Item.StartDateTime, context.Item.EndDateTime)</MudText>
+                </CellTemplate>
+            </PropertyColumn>
+
+            <TemplateColumn Title="Actions" CellStyle="text-align: right;">
+                <CellTemplate>
+                    <MudButton Variant="Variant.Text"
+                              Color="Color.Primary"
+                              Size="Size.Small"
+                              Href="@($"/activities/{context.Item.Id}")">
+                        <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" />
+                        View
+                    </MudButton>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+    </MudDataGrid>
+
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            @activities.Count activity@(activities.Count == 1 ? "" : "ies") total
+        </MudText>
+        <MudButton Variant="Variant.Outlined"
+                  Color="Color.Primary"
+                  StartIcon="@Icons.Material.Filled.CloudUpload"
+                  Href="/import">
+            Import New Activity
+        </MudButton>
+    </MudStack>
+}
+
+@inject webapp.Services.ActivityStore ActivityStore
+
+@code {
+    private List<webapp.Services.ActivitySummary>? activities;
+
+    protected override void OnInitialized()
+    {
+        LoadActivities();
+    }
+
+    private void LoadActivities()
+    {
+        activities = ActivityStore.Activities.ToList();
+    }
+
+    private string FormatDistance(double meters)
+    {
+        if (meters >= 1000)
+        {
+            return $"{meters / 1000:F1} km";
+        }
+        return $"{meters:F0} m";
+    }
+
+    private string FormatElevation(double meters)
+    {
+        return $"{meters:F0} m";
+    }
+
+    private string FormatSpeed(double metersPerSecond)
+    {
+        var kmh = metersPerSecond * 3.6;
+        return $"{kmh:F1} km/h";
+    }
+
+    private string FormatDuration(DateTime start, DateTime end)
+    {
+        var duration = end - start;
+        if (duration.TotalHours >= 1)
+        {
+            return $"{(int)duration.TotalHours}:{duration.Minutes:D2}:{duration.Seconds:D2}";
+        }
+        else if (duration.TotalMinutes >= 1)
+        {
+            return $"{(int)duration.TotalMinutes}:{duration.Seconds:D2}";
+        }
+        else
+        {
+            return $"{duration.Seconds} sec";
+        }
+    }
+
+}
