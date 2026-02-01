@@ -137,12 +137,31 @@
 
         try
         {
+            // Validate all files before uploading
             foreach (var file in selectedFiles)
             {
-                await UploadFile(file);
+                if (file.Size > 10 * 1024 * 1024)
+                {
+                    throw new Exception($"File {file.Name} is too large. Maximum size is 10MB.");
+                }
+
+                if (!file.Name.EndsWith(".gpx", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new Exception($"File {file.Name} is not a valid GPX file.");
+                }
             }
 
-            Snackbar.Add($"{selectedFiles.Count} file(s) uploaded successfully", Severity.Success);
+            // Use batch upload for multiple files, single upload for one file
+            if (selectedFiles.Count > 1)
+            {
+                await UploadBatch(selectedFiles);
+            }
+            else
+            {
+                await UploadFile(selectedFiles[0]);
+                Snackbar.Add("File uploaded successfully", Severity.Success);
+            }
+
             selectedFiles = null;
         }
         catch (Exception ex)
@@ -156,99 +175,91 @@
         }
     }
 
-    private async Task UploadFile(IBrowserFile file)
+    private async Task UploadBatch(IReadOnlyList<IBrowserFile> files)
     {
-        try
+        using var client = HttpClientFactory.CreateClient("ApiService");
+        using var content = new MultipartFormDataContent();
+
+        // Read all files into memory first to avoid concurrent SignalR stream issues
+        foreach (var file in files)
         {
-            // Validate file size (10MB limit)
-            if (file.Size > 10 * 1024 * 1024)
-            {
-                throw new Exception($"File {file.Name} is too large. Maximum size is 10MB.");
-            }
-
-            // Validate file extension
-            if (!file.Name.EndsWith(".gpx", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new Exception($"File {file.Name} is not a valid GPX file.");
-            }
-
-            using var client = HttpClientFactory.CreateClient("ApiService");
-            using var content = new MultipartFormDataContent();
-            // OpenReadStream requires maxAllowedSize parameter for files > 512KB
-            using var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024));
+            // Read the entire file into memory (files are limited to 10MB)
+            using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            using var memoryStream = new MemoryStream();
+            await stream.CopyToAsync(memoryStream);
+            
+            // Add the file content from memory
+            var fileContent = new ByteArrayContent(memoryStream.ToArray());
             fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
             content.Add(fileContent, "gpx", file.Name);
+        }
 
-            var response = await client.PostAsync("api/activities/import", content);
+        var response = await client.PostAsync("api/activities/import/batch", content);
 
-            if (response.IsSuccessStatusCode)
+        if (response.IsSuccessStatusCode)
+        {
+            var batchResult = await response.Content.ReadFromJsonAsync<BatchUploadResult>();
+            if (batchResult != null)
             {
-                var activity = await response.Content.ReadFromJsonAsync<webapp.Services.ActivitySummary>();
-                if (activity != null)
+                // Add successful activities to the list
+                foreach (var result in batchResult.Results.Where(r => r.Success && r.Activity != null))
                 {
-                    uploadedActivities.Add(activity);
-                    ActivityStore.Add(activity); // Add to shared store
+                    uploadedActivities.Add(result.Activity!);
+                    ActivityStore.Add(result.Activity!);
+                }
+
+                // Show summary message
+                if (batchResult.FailureCount > 0)
+                {
+                    Snackbar.Add($"{batchResult.SuccessCount}/{batchResult.TotalFiles} files uploaded successfully. {batchResult.FailureCount} failed.", Severity.Warning);
+                    
+                    // Show individual error messages
+                    foreach (var result in batchResult.Results.Where(r => !r.Success))
+                    {
+                        Snackbar.Add($"{result.FileName}: {result.ErrorMessage}", Severity.Error);
+                    }
                 }
                 else
                 {
-                    throw new Exception($"Invalid response format for {file.Name}");
+                    Snackbar.Add($"All {batchResult.SuccessCount} files uploaded successfully!", Severity.Success);
                 }
             }
-            else
-            {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                var errorMessage = $"Failed to process {file.Name}";
-
-                if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
-                {
-                    errorMessage += ": Invalid GPX file or format";
-                }
-                else if (response.StatusCode == System.Net.HttpStatusCode.RequestEntityTooLarge)
-                {
-                    errorMessage += ": File too large for server";
-                }
-                else if (response.StatusCode == System.Net.HttpStatusCode.InternalServerError)
-                {
-                    errorMessage += ": Server error processing file";
-                }
-                else
-                {
-                    errorMessage += $": {response.StatusCode}";
-                }
-
-                if (!string.IsNullOrEmpty(errorContent))
-                {
-                    try
-                    {
-                        var problemDetails = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(errorContent);
-                        if (problemDetails.TryGetProperty("detail", out var detail))
-                        {
-                            errorMessage += $" - {detail.GetString()}";
-                        }
-                    }
-                    catch
-                    {
-                        // If we can't parse the error, just use the raw content
-                        errorMessage += $" - {errorContent}";
-                    }
-                }
-
-                throw new Exception(errorMessage);
-            }
         }
-        catch (HttpRequestException ex)
+        else
         {
-            throw new Exception($"Network error uploading {file.Name}: {ex.Message}");
-        }
-        catch (Exception ex) when (ex.Message.Contains("too large") || ex.Message.Contains("size"))
-        {
-            throw; // Re-throw file size errors as-is
-        }
-        catch (Exception ex)
-        {
-            throw new Exception($"Error uploading {file.Name}: {ex.Message}");
+            var errorContent = await response.Content.ReadAsStringAsync();
+            throw new Exception($"Batch upload failed: {errorContent}");
         }
     }
+
+    private async Task UploadFile(IBrowserFile file)
+    {
+        using var client = HttpClientFactory.CreateClient("ApiService");
+        using var content = new MultipartFormDataContent();
+        using var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024));
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        content.Add(fileContent, "gpx", file.Name);
+
+        var response = await client.PostAsync("api/activities/import", content);
+
+        if (response.IsSuccessStatusCode)
+        {
+            var activity = await response.Content.ReadFromJsonAsync<webapp.Services.ActivitySummary>();
+            if (activity != null)
+            {
+                uploadedActivities.Add(activity);
+                ActivityStore.Add(activity);
+            }
+        }
+        else
+        {
+            var errorContent = await response.Content.ReadAsStringAsync();
+            throw new Exception($"Upload failed: {errorContent}");
+        }
+    }
+
+    private record BatchUploadResult(int TotalFiles, int SuccessCount, int FailureCount, List<FileUploadResult> Results);
+    private record FileUploadResult(string FileName, bool Success, string? ErrorMessage, webapp.Services.ActivitySummary? Activity);
 
     private string FormatDistance(double meters)
     {

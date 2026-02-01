@@ -114,6 +114,109 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
 })
 .WithName("ImportGpxActivity");
 
+app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxParserService gpxParser, IActivityRepository activityRepository) =>
+{
+    try
+    {
+        var form = await request.ReadFormAsync();
+        var files = form.Files.GetFiles("gpx");
+
+        if (files == null || files.Count == 0)
+        {
+            return Results.BadRequest("No GPX files provided");
+        }
+
+        var results = new List<object>();
+        var tasks = files.Select(async file =>
+        {
+            var result = new
+            {
+                FileName = file.FileName,
+                Success = false,
+                ErrorMessage = (string?)null,
+                Activity = (object?)null
+            };
+
+            try
+            {
+                if (!file.FileName.EndsWith(".gpx", StringComparison.OrdinalIgnoreCase))
+                {
+                    return result with { ErrorMessage = "File must be a GPX file" };
+                }
+
+                await using var stream = file.OpenReadStream();
+                var activityData = await gpxParser.ParseGpxAsync(stream);
+
+                var trackCoordinates = activityData.TrackPoints
+                    .Select(tp => new[] { tp.Latitude, tp.Longitude })
+                    .ToList();
+
+                var activity = new Activity
+                {
+                    Id = Guid.NewGuid(),
+                    Title = activityData.Title,
+                    StartDateTime = activityData.StartDateTime,
+                    EndDateTime = activityData.EndDateTime,
+                    ActivityType = activityData.ActivityType,
+                    DistanceMeters = activityData.DistanceMeters,
+                    ElevationGainMeters = activityData.ElevationGainMeters,
+                    ElevationLossMeters = activityData.ElevationLossMeters,
+                    AverageSpeedMs = activityData.AverageSpeedMs,
+                    MaxSpeedMs = activityData.MaxSpeedMs,
+                    TrackPointCount = activityData.TrackPoints.Count,
+                    TrackCoordinatesJson = JsonSerializer.Serialize(trackCoordinates),
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await activityRepository.CreateActivityAsync(activity);
+
+                var activityResponse = new
+                {
+                    activity.Id,
+                    activity.Title,
+                    activity.StartDateTime,
+                    activity.EndDateTime,
+                    activity.ActivityType,
+                    activity.DistanceMeters,
+                    activity.ElevationGainMeters,
+                    activity.ElevationLossMeters,
+                    activity.AverageSpeedMs,
+                    activity.MaxSpeedMs,
+                    TrackPoints = activity.TrackPointCount,
+                    activity.CreatedAt,
+                    TrackCoordinates = trackCoordinates
+                };
+
+                return result with { Success = true, Activity = activityResponse };
+            }
+            catch (Exception ex)
+            {
+                return result with { ErrorMessage = ex.Message };
+            }
+        });
+
+        var processedResults = await Task.WhenAll(tasks);
+        var successCount = processedResults.Count(r => r.Success);
+        var totalCount = processedResults.Length;
+
+        var batchResponse = new
+        {
+            TotalFiles = totalCount,
+            SuccessCount = successCount,
+            FailureCount = totalCount - successCount,
+            Results = processedResults
+        };
+
+        return Results.Ok(batchResponse);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error processing batch import: {ex.Message}");
+    }
+})
+.WithName("BatchImportGpxActivities")
+.WithDescription("Import multiple GPX files in a single request");
+
 app.MapGet("/api/activities", async (IActivityRepository repository) =>
 {
     var activities = await repository.GetAllActivitiesAsync();
