@@ -71,6 +71,18 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
             .Select(tp => new[] { tp.Latitude, tp.Longitude })
             .ToList();
 
+        var trackData = activityData.TrackPoints
+            .Select(tp => new double?[]
+            {
+                tp.Latitude,
+                tp.Longitude,
+                tp.Elevation,
+                tp.HeartRate,
+                tp.Time.HasValue ? (double?)new DateTimeOffset(tp.Time.Value).ToUnixTimeMilliseconds() : null,
+                tp.Cadence
+            })
+            .ToList();
+
         var activity = new Activity
         {
             Id = Guid.NewGuid(),
@@ -85,6 +97,7 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
             MaxSpeedMs = activityData.MaxSpeedMs,
             TrackPointCount = activityData.TrackPoints.Count,
             TrackCoordinatesJson = JsonSerializer.Serialize(trackCoordinates),
+            TrackDataJson = JsonSerializer.Serialize(trackData),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -104,7 +117,8 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
             activity.MaxSpeedMs,
             TrackPoints = activity.TrackPointCount,
             activity.CreatedAt,
-            TrackCoordinates = trackCoordinates
+            TrackCoordinates = trackCoordinates,
+            TrackData = trackData
         };
 
         return Results.Created($"/api/activities/{activity.Id}", response);
@@ -153,6 +167,17 @@ app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxPars
                     .Select(tp => new[] { tp.Latitude, tp.Longitude })
                     .ToList();
 
+                var trackData = activityData.TrackPoints
+                    .Select(tp => new double?[]
+                    {
+                        tp.Latitude,
+                        tp.Longitude,
+                        tp.Elevation,
+                        tp.HeartRate,
+                        tp.Time.HasValue ? (double?)new DateTimeOffset(tp.Time.Value).ToUnixTimeMilliseconds() : null
+                    })
+                    .ToList();
+
                 var activity = new Activity
                 {
                     Id = Guid.NewGuid(),
@@ -167,6 +192,7 @@ app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxPars
                     MaxSpeedMs = activityData.MaxSpeedMs,
                     TrackPointCount = activityData.TrackPoints.Count,
                     TrackCoordinatesJson = JsonSerializer.Serialize(trackCoordinates),
+                    TrackDataJson = JsonSerializer.Serialize(trackData),
                     CreatedAt = DateTime.UtcNow
                 };
 
@@ -186,7 +212,8 @@ app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxPars
                     activity.MaxSpeedMs,
                     TrackPoints = activity.TrackPointCount,
                     activity.CreatedAt,
-                    TrackCoordinates = trackCoordinates
+                    TrackCoordinates = trackCoordinates,
+                    TrackData = trackData
                 };
 
                 return result with { Success = true, Activity = activityResponse };
@@ -290,6 +317,18 @@ app.MapPost("/api/activities/smart-merge/import", async (HttpRequest request, IS
             .Select(tp => new[] { tp.Latitude, tp.Longitude })
             .ToList();
 
+        var trackData = activityData.TrackPoints
+            .Select(tp => new double?[]
+            {
+                tp.Latitude,
+                tp.Longitude,
+                tp.Elevation,
+                tp.HeartRate,
+                tp.Time.HasValue ? (double?)new DateTimeOffset(tp.Time.Value).ToUnixTimeMilliseconds() : null,
+                tp.Cadence
+            })
+            .ToList();
+
         var activity = new Activity
         {
             Id = Guid.NewGuid(),
@@ -304,6 +343,7 @@ app.MapPost("/api/activities/smart-merge/import", async (HttpRequest request, IS
             MaxSpeedMs = activityData.MaxSpeedMs,
             TrackPointCount = activityData.TrackPoints.Count,
             TrackCoordinatesJson = JsonSerializer.Serialize(trackCoordinates),
+            TrackDataJson = JsonSerializer.Serialize(trackData),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -323,7 +363,8 @@ app.MapPost("/api/activities/smart-merge/import", async (HttpRequest request, IS
             activity.MaxSpeedMs,
             TrackPoints = activity.TrackPointCount,
             activity.CreatedAt,
-            TrackCoordinates = trackCoordinates
+            TrackCoordinates = trackCoordinates,
+            TrackData = trackData
         };
 
         return Results.Created($"/api/activities/{activity.Id}", response);
@@ -379,6 +420,12 @@ app.MapGet("/api/activities/{id}", async (Guid id, IActivityRepository repositor
         trackCoordinates = JsonSerializer.Deserialize<List<double[]>>(activity.TrackCoordinatesJson);
     }
 
+    List<double?[]>? trackData = null;
+    if (!string.IsNullOrEmpty(activity.TrackDataJson))
+    {
+        trackData = JsonSerializer.Deserialize<List<double?[]>>(activity.TrackDataJson);
+    }
+
     var response = new
     {
         activity.Id,
@@ -393,7 +440,8 @@ app.MapGet("/api/activities/{id}", async (Guid id, IActivityRepository repositor
         activity.MaxSpeedMs,
         TrackPoints = activity.TrackPointCount,
         activity.CreatedAt,
-        TrackCoordinates = trackCoordinates
+        TrackCoordinates = trackCoordinates,
+        TrackData = trackData
     };
 
     return Results.Ok(response);

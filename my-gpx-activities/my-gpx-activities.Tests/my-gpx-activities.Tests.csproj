@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\my-gpx-activities.AppHost\my-gpx-activities.AppHost.csproj" />
+    <ProjectReference Include="..\my-gpx-activities.ApiService\my-gpx-activities.ApiService.csproj" />
   </ItemGroup>
 
   <ItemGroup>

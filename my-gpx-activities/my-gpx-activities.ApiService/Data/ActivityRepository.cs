@@ -30,6 +30,7 @@ public class ActivityRepository : IActivityRepository
                 max_speed_ms,
                 track_point_count,
                 track_coordinates_json,
+                track_data_json,
                 created_at
             FROM activities
             ORDER BY start_date_time DESC
@@ -56,6 +57,7 @@ public class ActivityRepository : IActivityRepository
                 max_speed_ms,
                 track_point_count,
                 track_coordinates_json,
+                track_data_json,
                 created_at
             FROM activities
             WHERE id = @Id
@@ -82,6 +84,7 @@ public class ActivityRepository : IActivityRepository
                 max_speed_ms,
                 track_point_count,
                 track_coordinates_json,
+                track_data_json,
                 created_at
             ) VALUES (
                 @Id,
@@ -96,6 +99,7 @@ public class ActivityRepository : IActivityRepository
                 @MaxSpeedMs,
                 @TrackPointCount,
                 @TrackCoordinatesJson::jsonb,
+                @TrackDataJson::jsonb,
                 @CreatedAt
             )
             RETURNING id
@@ -113,6 +117,7 @@ public class ActivityRepository : IActivityRepository
                 activity.MaxSpeedMs,
                 activity.TrackPointCount,
                 activity.TrackCoordinatesJson,
+                activity.TrackDataJson,
                 activity.CreatedAt
             });
 
@@ -135,7 +140,8 @@ public class ActivityRepository : IActivityRepository
                 average_speed_ms = @AverageSpeedMs,
                 max_speed_ms = @MaxSpeedMs,
                 track_point_count = @TrackPointCount,
-                track_coordinates_json = @TrackCoordinatesJson::jsonb
+                track_coordinates_json = @TrackCoordinatesJson::jsonb,
+                track_data_json = @TrackDataJson::jsonb
             WHERE id = @Id
             """, new
             {
@@ -150,7 +156,8 @@ public class ActivityRepository : IActivityRepository
                 activity.AverageSpeedMs,
                 activity.MaxSpeedMs,
                 activity.TrackPointCount,
-                activity.TrackCoordinatesJson
+                activity.TrackCoordinatesJson,
+                activity.TrackDataJson
             });
 
         return rowsAffected > 0;
@@ -262,6 +269,7 @@ public class ActivityRepository : IActivityRepository
             MaxSpeedMs = dto.Max_Speed_Ms,
             TrackPointCount = dto.Track_Point_Count,
             TrackCoordinatesJson = dto.Track_Coordinates_Json,
+            TrackDataJson = dto.Track_Data_Json,
             CreatedAt = dto.Created_At
         };
     }
@@ -289,6 +297,7 @@ public class ActivityRepository : IActivityRepository
         public double Max_Speed_Ms { get; set; }
         public int Track_Point_Count { get; set; }
         public string? Track_Coordinates_Json { get; set; }
+        public string? Track_Data_Json { get; set; }
         public DateTime Created_At { get; set; }
     }
 
