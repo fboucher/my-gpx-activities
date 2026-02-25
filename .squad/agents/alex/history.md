@@ -36,3 +36,15 @@
 - **Chart colors**: Elevation = teal, Pace = amber `rgb(234,179,8)`, HR = red/pink, Cadence = purple `rgb(168,85,247)`.
 - **`destroyActivityCharts`**: Tears down all four charts + removes the sync marker on disposal to prevent Leaflet/Chart.js memory leaks.
 
+
+### Issue #23 — Map dot position sync with chart hover
+- **Root cause**: Charts were downsampled to ~500 points for performance, but the hover handler used the downsampled index directly on the original `trackData` array. At 29/30 minutes (97% through the chart), the code accessed `trackData[497]` when it should have accessed `trackData[~2900]` (the original index of that downsampled point).
+- **Fix**: Store the downsampling index maps (`dsIndexMaps.elevation`, `.pace`, `.hr`, `.cadence`) — each is an array mapping chart index → original trackData index. When hovering, `makeHoverHandler` now receives the index map and uses `indexMap[chartIdx]` to find the correct lat/lon in the original data.
+- **Result**: Map blue dot now tracks the exact GPS position corresponding to the hovered chart point, moving smoothly along the entire route as you scrub through the timeline.
+
+### Issue #5 — Activities page UX improvements
+- **Filters added**: Two-part filter system — text search (by activity title or type) + dropdown filter by activity type. `FilteredActivities` computed property applies both filters in sequence. Activity type dropdown is dynamically populated from distinct types in the current activity list.
+- **Button repositioning**: Moved "View" action buttons from right-aligned last column to left-most column (first column). Keeps buttons visible and accessible without horizontal scrolling on narrow screens.
+- **Row hover highlight**: Added `Hover="true"` to `MudDataGrid` — MudBlazor's built-in hover styling provides visual feedback when mousing over rows.
+- **Filter UI design**: Wrapped filters in `MudPaper` with elevation for visual separation. Used `MudTextField` with search icon and debounce (300ms) to avoid excessive re-filtering on every keystroke.
+- **Counter update**: Footer now shows `X of Y activities` when filters are active, indicating how many match out of total.
