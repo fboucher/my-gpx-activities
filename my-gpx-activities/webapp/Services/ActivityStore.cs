@@ -11,6 +11,16 @@ public class ActivityStore
         _activities.Add(activity);
     }
 
+    public void AddOrUpdate(ActivitySummary activity)
+    {
+        var existing = GetById(activity.Id);
+        if (existing != null)
+        {
+            _activities.Remove(existing);
+        }
+        _activities.Add(activity);
+    }
+
     public ActivitySummary? GetById(Guid id)
     {
         return _activities.FirstOrDefault(a => a.Id == id);

@@ -91,3 +91,21 @@
 **Key implementation detail:** SmartMergeService returns a string, but GpxParserService expects a Stream — use MemoryStream with UTF-8 encoding to bridge them.
 
 **Location:** `my-gpx-activities.ApiService/Program.cs` line 261-339 (immediately after existing smart-merge endpoint)
+
+### ActivityDetail Page: Fetch Full Data When Store Has Summary Only
+**Problem:** ActivityDetail showed empty charts/map when activity was previously loaded via the list page. Root cause: `/api/activities` (list endpoint) returns summary data WITHOUT `TrackData` and `TrackCoordinates`, but `ActivityDetail.razor` checked the store first and used the incomplete data directly.
+
+**Fix applied:**
+1. Changed condition in `ActivityDetail.razor` line 296 from `if (storedActivity == null)` to `if (storedActivity == null || storedActivity.TrackData == null)`
+2. Added `ActivityStore.AddOrUpdate()` method that removes existing entry before adding new one (prevents duplicates)
+3. Updated detail page to call `AddOrUpdate()` instead of `Add()` when caching full data from API
+
+**Behavior after fix:**
+- Store check is used only when full data (TrackData present) is cached
+- When store has summary-only data, we fetch from `/api/activities/{id}` to get full data including TrackData and TrackCoordinates
+- AddOrUpdate ensures the store is updated with full data, not duplicated
+- Subsequent visits to same detail page use cached full data (no redundant API calls)
+
+**Files changed:**
+- `my-gpx-activities/webapp/Components/Pages/ActivityDetail.razor` — updated LoadActivityAsync condition and method call
+- `my-gpx-activities/webapp/Services/ActivityStore.cs` — added AddOrUpdate method

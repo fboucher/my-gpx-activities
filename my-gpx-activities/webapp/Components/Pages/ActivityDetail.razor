@@ -292,16 +292,16 @@ else
         // First try in-memory store for fast access
         var storedActivity = ActivityStore.GetById(Id);
         
-        // If not in store, fetch from API (PostgreSQL)
-        if (storedActivity == null)
+        // If not in store OR only has summary data (no TrackData), fetch from API (PostgreSQL)
+        if (storedActivity == null || storedActivity.TrackData == null)
         {
             try
             {
                 storedActivity = await ActivityApiClient.GetActivityByIdAsync(Id);
                 if (storedActivity != null)
                 {
-                    // Cache in store for session
-                    ActivityStore.Add(storedActivity);
+                    // Cache in store for session (replace if already exists)
+                    ActivityStore.AddOrUpdate(storedActivity);
                 }
             }
             catch (Exception)

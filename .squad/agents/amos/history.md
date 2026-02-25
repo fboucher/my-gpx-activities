@@ -43,3 +43,13 @@
 - `SmartMergeService` — binary-searches sorted FIT points for nearest timestamp within 5s tolerance
 - `HeatMapActivity` model: `{ ActivityId, ActivityName, SportType, TrackPoints: double[][] }`
 - Heatmap endpoint accepts `dateFrom`, `dateTo`, `sportTypes` (comma-separated) query params
+
+### Session: CI Workflow Fix (dorny/test-reporter failure)
+
+**Issue:** The CI workflow `.github/workflows/ci.yml` was failing with "No test report files were found" from the `dorny/test-reporter` action.
+
+**Root Cause:** The `dotnet test` command used the `--no-build` flag, which caused a dependency on the prior `dotnet build` step completing correctly. If the build didn't produce test binaries in the expected state, the test step would fail to generate the TRX report file.
+
+**Fix Applied:** Removed `--no-build` flag from the test command on line 37 of `.github/workflows/ci.yml`. This makes `dotnet test` self-contained—it rebuilds only what's needed (with cached NuGet packages from the earlier restore step) and guarantees the TRX file is generated.
+
+**Learning:** When CI steps have implicit dependencies (like `--no-build` depending on a prior build), the safest approach is to make each step self-contained unless there's a significant performance penalty. The NuGet cache ensures reasonable build speed without sacrificing reliability.

@@ -34,7 +34,7 @@ jobs:
         run: dotnet build --no-restore --configuration Release
       
       - name: Run unit tests
-        run: dotnet test my-gpx-activities/my-gpx-activities.Tests --no-build --configuration Release --filter "FullyQualifiedName~FitParserServiceTests" --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=detailed"
+        run: dotnet test my-gpx-activities/my-gpx-activities.Tests --configuration Release --filter "FullyQualifiedName~FitParserServiceTests" --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=detailed"
       
       - name: Publish test results
         uses: dorny/test-reporter@v1
