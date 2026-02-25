@@ -11,9 +11,31 @@ public class ActivityStore
         _activities.Add(activity);
     }
 
+    public void AddOrUpdate(ActivitySummary activity)
+    {
+        var existing = GetById(activity.Id);
+        if (existing != null)
+        {
+            _activities.Remove(existing);
+        }
+        _activities.Add(activity);
+    }
+
     public ActivitySummary? GetById(Guid id)
     {
         return _activities.FirstOrDefault(a => a.Id == id);
+    }
+
+    public void Update(Guid id, string? title, string? activityType)
+    {
+        var activity = GetById(id);
+        if (activity != null)
+        {
+            if (title != null)
+                activity.Title = title;
+            if (activityType != null)
+                activity.ActivityType = activityType;
+        }
     }
 
     public void Clear()

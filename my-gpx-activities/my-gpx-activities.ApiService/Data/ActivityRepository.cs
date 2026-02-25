@@ -163,6 +163,26 @@ public class ActivityRepository : IActivityRepository
         return rowsAffected > 0;
     }
 
+    public async Task<Activity?> UpdateActivityPartialAsync(Guid id, string? title, string? activityType)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync();
+
+        var existing = await GetActivityByIdAsync(id);
+        if (existing == null) return null;
+
+        if (title != null) existing.Title = title;
+        if (activityType != null) existing.ActivityType = activityType;
+
+        await connection.ExecuteAsync("""
+            UPDATE activities SET
+                title = @Title,
+                activity_type = @ActivityType
+            WHERE id = @Id
+            """, new { existing.Id, existing.Title, existing.ActivityType });
+
+        return existing;
+    }
+
     public async Task<bool> DeleteActivityAsync(Guid id)
     {
         await using var connection = await _connectionFactory.CreateConnectionAsync();

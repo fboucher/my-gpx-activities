@@ -19,7 +19,14 @@ else if (!string.IsNullOrEmpty(errorMessage))
 }
 else
 {
-    <MudText Typo="Typo.h3" GutterBottom="true">@activity.Title</MudText>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudText Typo="Typo.h3">@activity.Title</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                       Size="Size.Medium"
+                       Color="Color.Primary"
+                       aria-label="Edit activity"
+                       OnClick="OpenEditDialog" />
+    </MudStack>
 
     <MudGrid Class="mb-4">
         <MudItem xs="12" sm="6" md="3">
@@ -189,7 +196,8 @@ else
                         <MudButton Variant="Variant.Outlined"
                                   Color="Color.Secondary"
                                   StartIcon="@Icons.Material.Filled.Edit"
-                                  FullWidth="true">
+                                  FullWidth="true"
+                                  OnClick="OpenEditDialog">
                             Edit Activity
                         </MudButton>
                         <MudButton Variant="Variant.Outlined"
@@ -221,7 +229,9 @@ else
 </MudStack>
 
 @inject webapp.Services.ActivityStore ActivityStore
+@inject webapp.Services.ActivityApiClient ActivityApiClient
 @inject IJSRuntime JSRuntime
+@inject MudBlazor.IDialogService DialogService
 
 @code {
     [Parameter]
@@ -230,9 +240,39 @@ else
     private ActivityViewModel? activity;
     private string? errorMessage;
 
-    protected override void OnInitialized()
+    private async Task OpenEditDialog()
     {
-        LoadActivity();
+        if (activity == null) return;
+
+        var activityTypes = await ActivityApiClient.GetActivityTypesAsync();
+
+        var parameters = new MudBlazor.DialogParameters
+        {
+            [nameof(EditActivityDialog.ActivityId)] = activity.Id,
+            [nameof(EditActivityDialog.CurrentTitle)] = activity.Title,
+            [nameof(EditActivityDialog.CurrentActivityType)] = activity.ActivityType,
+            [nameof(EditActivityDialog.ActivityTypes)] = activityTypes
+        };
+
+        var dialog = await DialogService.ShowAsync<EditActivityDialog>("Edit Activity", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: EditActivityResult editResult })
+        {
+            var updated = await ActivityApiClient.UpdateActivityAsync(activity.Id, editResult.Title, editResult.ActivityType);
+            if (updated != null)
+            {
+                ActivityStore.Update(activity.Id, editResult.Title, editResult.ActivityType);
+                activity.Title = updated.Title;
+                activity.ActivityType = updated.ActivityType;
+                StateHasChanged();
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadActivityAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -247,9 +287,29 @@ else
         }
     }
 
-    private void LoadActivity()
+    private async Task LoadActivityAsync()
     {
+        // First try in-memory store for fast access
         var storedActivity = ActivityStore.GetById(Id);
+        
+        // If not in store OR only has summary data (no TrackData), fetch from API (PostgreSQL)
+        if (storedActivity == null || storedActivity.TrackData == null)
+        {
+            try
+            {
+                storedActivity = await ActivityApiClient.GetActivityByIdAsync(Id);
+                if (storedActivity != null)
+                {
+                    // Cache in store for session (replace if already exists)
+                    ActivityStore.AddOrUpdate(storedActivity);
+                }
+            }
+            catch (Exception)
+            {
+                errorMessage = "Activity not found. It may have been deleted or you may need to import it again.";
+                return;
+            }
+        }
         
         if (storedActivity == null)
         {

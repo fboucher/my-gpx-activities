@@ -1,5 +1,9 @@
 name: Squad Protected Branch Guard
 
+# IMPORTANT: This workflow must be set as a required status check in GitHub branch protection
+# for main. Without it being required, PRs can merge despite this check failing.
+# To configure: Settings → Branches → Branch protection rules → main → Require status checks → "guard"
+
 on:
   pull_request:
     branches: [main, preview, insider]
@@ -78,6 +82,7 @@ jobs:
                 if (f === '.ai-team' || f.startsWith('.ai-team/') || f === '.squad' || f.startsWith('.squad/')) return true;
                 // .ai-team-templates/** ΓÇö Squad's own templates, stay on dev
                 if (f === '.ai-team-templates' || f.startsWith('.ai-team-templates/')) return true;
+                if (f === '.squad-templates' || f.startsWith('.squad-templates/')) return true;
                 // team-docs/** ΓÇö ALL internal team docs, zero exceptions
                 if (f.startsWith('team-docs/')) return true;
                 // docs/proposals/** ΓÇö internal design proposals, stay on dev
@@ -124,6 +129,9 @@ jobs:
               '',
               '# Remove tracked .github/copilot-instructions.md (keeps local copy):',
               'git rm --cached .github/copilot-instructions.md',
+              '',
+              '# Remove tracked .squad-templates/ files (keeps local copies):',
+              'git rm --cached -r .squad-templates/',
               '',
               '# Remove tracked team-docs/ files:',
               'git rm --cached -r team-docs/',

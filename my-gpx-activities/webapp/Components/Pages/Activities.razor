@@ -31,15 +31,55 @@ else if (!activities.Any())
 }
 else
 {
+    <MudStack Spacing="3" Class="mb-4">
+        <MudPaper Elevation="2" Class="pa-4">
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                <MudTextField @bind-Value="searchText"
+                             Label="Search activities"
+                             Variant="Variant.Outlined"
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             Immediate="true"
+                             DebounceInterval="300"
+                             Class="flex-grow-1" />
+                <MudSelect @bind-Value="selectedActivityType"
+                          Label="Activity Type"
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          Class="flex-shrink-0"
+                          Style="min-width: 200px;">
+                    <MudSelectItem Value="@("")">All Activities</MudSelectItem>
+                    @foreach (var type in GetActivityTypes())
+                    {
+                        <MudSelectItem Value="@type">@type</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudStack>
+        </MudPaper>
+    </MudStack>
+
     <MudDataGrid T="ActivitySummary"
-                Items="activities"
+                Items="FilteredActivities"
                 SortMode="SortMode.Multiple"
                 Filterable="false"
                 Striped="true"
                 Bordered="true"
                 Dense="true"
+                Hover="true"
                 Class="mb-4">
         <Columns>
+            <TemplateColumn Title="Actions">
+                <CellTemplate>
+                    <MudButton Variant="Variant.Text"
+                              Color="Color.Primary"
+                              Size="Size.Small"
+                              Href="@($"/activities/{context.Item.Id}")">
+                        <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" />
+                        View
+                    </MudButton>
+                </CellTemplate>
+            </TemplateColumn>
+
             <PropertyColumn Property="x => x.StartDateTime" Title="Date" SortBy="x => x.StartDateTime">
                 <CellTemplate>
                     <MudStack Spacing="0">
@@ -84,24 +124,12 @@ else
                     <MudText Typo="Typo.body2">@FormatDuration(context.Item.StartDateTime, context.Item.EndDateTime)</MudText>
                 </CellTemplate>
             </PropertyColumn>
-
-            <TemplateColumn Title="Actions" CellStyle="text-align: right;">
-                <CellTemplate>
-                    <MudButton Variant="Variant.Text"
-                              Color="Color.Primary"
-                              Size="Size.Small"
-                              Href="@($"/activities/{context.Item.Id}")">
-                        <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" />
-                        View
-                    </MudButton>
-                </CellTemplate>
-            </TemplateColumn>
         </Columns>
     </MudDataGrid>
 
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
         <MudText Typo="Typo.body2" Color="Color.Secondary">
-            @activities.Count activity@(activities.Count == 1 ? "" : "ies") total
+            @FilteredActivities.Count() of @activities.Count activity@(activities.Count == 1 ? "" : "ies")
         </MudText>
         <MudButton Variant="Variant.Outlined"
                   Color="Color.Primary"
@@ -113,18 +141,66 @@ else
 }
 
 @inject webapp.Services.ActivityStore ActivityStore
+@inject webapp.Services.ActivityApiClient ActivityApiClient
 
 @code {
     private List<webapp.Services.ActivitySummary>? activities;
+    private string searchText = string.Empty;
+    private string selectedActivityType = string.Empty;
 
-    protected override void OnInitialized()
+    private IEnumerable<webapp.Services.ActivitySummary> FilteredActivities
     {
-        LoadActivities();
+        get
+        {
+            if (activities == null) return Enumerable.Empty<webapp.Services.ActivitySummary>();
+
+            var filtered = activities.AsEnumerable();
+
+            // Apply text search filter
+            if (!string.IsNullOrWhiteSpace(searchText))
+            {
+                filtered = filtered.Where(a => 
+                    a.Title.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                    (a.ActivityType?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false));
+            }
+
+            // Apply activity type filter
+            if (!string.IsNullOrWhiteSpace(selectedActivityType))
+            {
+                filtered = filtered.Where(a => 
+                    a.ActivityType != null && 
+                    a.ActivityType.Equals(selectedActivityType, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return filtered;
+        }
     }
 
-    private void LoadActivities()
+    protected override async Task OnInitializedAsync()
     {
+        await LoadActivitiesAsync();
+    }
+
+    private async Task LoadActivitiesAsync()
+    {
+        // Seed store from API if empty (e.g. after restart)
+        if (!ActivityStore.Activities.Any())
+        {
+            var apiActivities = await ActivityApiClient.GetAllActivitiesAsync();
+            foreach (var a in apiActivities)
+                ActivityStore.Add(a);
+        }
         activities = ActivityStore.Activities.ToList();
+    }
+
+    private IEnumerable<string> GetActivityTypes()
+    {
+        if (activities == null) return Enumerable.Empty<string>();
+        return activities
+            .Where(a => !string.IsNullOrWhiteSpace(a.ActivityType))
+            .Select(a => a.ActivityType!)
+            .Distinct()
+            .OrderBy(t => t);
     }
 
     private string FormatDistance(double meters)
