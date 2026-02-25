@@ -16,6 +16,18 @@ public class ActivityStore
         return _activities.FirstOrDefault(a => a.Id == id);
     }
 
+    public void Update(Guid id, string? title, string? activityType)
+    {
+        var activity = GetById(id);
+        if (activity != null)
+        {
+            if (title != null)
+                activity.Title = title;
+            if (activityType != null)
+                activity.ActivityType = activityType;
+        }
+    }
+
     public void Clear()
     {
         _activities.Clear();
