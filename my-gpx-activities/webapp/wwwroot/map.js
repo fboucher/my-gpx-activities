@@ -112,3 +112,76 @@ window.destroyMap = () => {
         endMarker = null;
     }
 };
+
+// ── Heat Map ─────────────────────────────────────────────────────────────────
+let heatMap = null;
+let heatMapLayers = [];
+
+const sportColors = [
+    '#E53935', '#8E24AA', '#1E88E5', '#00ACC1',
+    '#43A047', '#FB8C00', '#F4511E', '#6D4C41',
+    '#546E7A', '#D81B60'
+];
+
+function heatMapSportColor(sportType, colorMap) {
+    if (colorMap[sportType]) return colorMap[sportType];
+    const keys = Object.keys(colorMap);
+    const color = sportColors[keys.length % sportColors.length];
+    colorMap[sportType] = color;
+    return color;
+}
+
+window.initializeHeatMap = (elementId) => {
+    if (heatMap) {
+        heatMap.remove();
+        heatMap = null;
+        heatMapLayers = [];
+    }
+    heatMap = L.map(elementId).setView([45.0, -73.0], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(heatMap);
+    setTimeout(() => heatMap.invalidateSize(), 100);
+};
+
+window.drawHeatMapTraces = (activities) => {
+    if (!heatMap) return;
+
+    heatMapLayers.forEach(l => heatMap.removeLayer(l));
+    heatMapLayers = [];
+
+    if (!activities || activities.length === 0) return;
+
+    const colorMap = {};
+    const bounds = L.latLngBounds([]);
+
+    activities.forEach(activity => {
+        const pts = activity.trackPoints;
+        if (!pts || pts.length < 2) return;
+
+        const color = heatMapSportColor(activity.sportType, colorMap);
+        const latlngs = pts.map(p => [p[0], p[1]]);
+
+        const polyline = L.polyline(latlngs, {
+            color,
+            weight: 2,
+            opacity: 0.7
+        }).bindTooltip(`${activity.activityName} (${activity.sportType})`, { sticky: true });
+
+        polyline.addTo(heatMap);
+        heatMapLayers.push(polyline);
+        bounds.extend(latlngs);
+    });
+
+    if (bounds.isValid()) {
+        heatMap.fitBounds(bounds, { padding: [20, 20] });
+    }
+};
+
+window.destroyHeatMap = () => {
+    if (heatMap) {
+        heatMap.remove();
+        heatMap = null;
+        heatMapLayers = [];
+    }
+};
