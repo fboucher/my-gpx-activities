@@ -1,36 +1,55 @@
 # my-gpx-activities
 
+[![CI](https://github.com/fboucher/my-gpx-activities/actions/workflows/ci.yml/badge.svg)](https://github.com/fboucher/my-gpx-activities/actions/workflows/ci.yml)
+[![Docker Publish](https://github.com/fboucher/my-gpx-activities/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/fboucher/my-gpx-activities/actions/workflows/docker-publish.yml)
+[![Docker Beta](https://github.com/fboucher/my-gpx-activities/actions/workflows/docker-beta.yml/badge.svg)](https://github.com/fboucher/my-gpx-activities/actions/workflows/docker-beta.yml)
+[![Docker Hub](https://img.shields.io/docker/pulls/fboucher/my-gpx-activities-api?label=Docker%20Hub)](https://hub.docker.com/r/fboucher/my-gpx-activities-api)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A .NET 10 Aspire application for managing personal GPX files. Upload, view, and analyze GPS activity data with interactive maps.
 
-## Running Locally
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd my-gpx-activities
-
-# Run the application (includes PostgreSQL database)
-dotnet run --project my-gpx-activities.AppHost
-```
-
-The application will be available at:
-- Web UI: https://localhost:15888 (or similar)
-- API: https://localhost:15889 (or similar)
-- pgAdmin: https://localhost:15890 (or similar)
+> **Note:** This project was built with heavy AI assistance. The author knows how to code but embraced AI-assisted development throughout. The code is production-ready and follows modern .NET best practices.
 
 ## Features
 
 - Upload GPX files for GPS activities
-- View activity details and analytics
+- View activity details and analytics  
 - Interactive maps showing routes
+- Heart rate and cadence data support with FIT file merging
 - Database persistence with PostgreSQL
 
-## Docker Compose
+## Getting Started
 
-Pre-built images are published to Docker Hub on every release. Use the example below to run the full stack without a local .NET install.
+### Running Locally
+
+Requires .NET 10 and PostgreSQL (or use Docker Compose).
+
+```bash
+# Clone and run
+git clone https://github.com/fboucher/my-gpx-activities
+cd my-gpx-activities
+
+# Run the full application with Aspire (includes PostgreSQL)
+dotnet run --project my-gpx-activities.AppHost
+```
+
+The application will be available at:
+- **Web UI:** https://localhost:15888 (or similar)
+- **API:** https://localhost:15889 (or similar)
+- **pgAdmin:** https://localhost:15890 (or similar)
+
+See [AGENTS.md](AGENTS.md) for detailed development setup and code style guidelines.
+
+### Docker Compose
+
+Pre-built images are published to Docker Hub on every release. Run the full stack without a local .NET install:
+
+```bash
+# Save this as docker-compose.yml
+docker compose up
+```
 
 ```yaml
-# docker-compose.yml
 services:
   db:
     image: postgres:16
@@ -71,12 +90,34 @@ volumes:
   gpxdata:
 ```
 
-Then run:
+Web UI: **http://localhost:8081** | API: **http://localhost:8080**
 
-```bash
-docker compose up
-```
+> Tip: Replace `latest` with a specific version tag (e.g., `0.2.0`) for reproducible deployments.
 
-The web UI will be available at **http://localhost:8081** and the API at **http://localhost:8080**.
+## Development
 
-Replace `latest` with a specific version tag (e.g., `0.2.0`) for reproducible deployments.
+This project uses:
+- **.NET 10** with Aspire for orchestration
+- **Blazor Server** + **MudBlazor** for the UI
+- **PostgreSQL** for persistence
+- **NUnit** for testing
+
+See [AGENTS.md](AGENTS.md) for:
+- Build, lint, and test commands
+- Code style and naming conventions  
+- Architecture patterns and best practices
+- Team structure and responsibilities
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
+- How to fork and branch
+- Pull request process
+- Code review expectations
+- Code style guidelines
+
+Read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community guidelines.
+
+## License
+
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
