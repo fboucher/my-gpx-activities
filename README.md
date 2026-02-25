@@ -8,7 +8,15 @@
 
 A .NET 10 Aspire application for managing personal GPX files. Upload, view, and analyze GPS activity data with interactive maps.
 
+![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
+![Blazor](https://img.shields.io/badge/Blazor-Server-512BD4?logo=blazor&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-enabled-2496ED?logo=docker&logoColor=white)
+![MudBlazor](https://img.shields.io/badge/MudBlazor-UI-594AE2)
+
 > **Note:** This project was built with heavy AI assistance. The author knows how to code but embraced AI-assisted development throughout. The code is production-ready and follows modern .NET best practices.
+
+📸 **Screenshots welcome!** See [docs/screenshots/README.md](docs/screenshots/README.md) to contribute.
 
 ## Features
 
@@ -17,6 +25,15 @@ A .NET 10 Aspire application for managing personal GPX files. Upload, view, and 
 - Interactive maps showing routes
 - Heart rate and cadence data support with FIT file merging
 - Database persistence with PostgreSQL
+
+## Prerequisites
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (required for the PostgreSQL database)
+- Aspire workload:
+  ```bash
+  dotnet workload install aspire
+  ```
 
 ## Getting Started
 
@@ -37,6 +54,8 @@ The application will be available at:
 - **Web UI:** https://localhost:15888 (or similar)
 - **API:** https://localhost:15889 (or similar)
 - **pgAdmin:** https://localhost:15890 (or similar)
+
+> 💡 **API documentation** (Swagger UI) is available at the API service URL + `/swagger` when running in development mode.
 
 See [AGENTS.md](AGENTS.md) for detailed development setup and code style guidelines.
 
@@ -107,6 +126,14 @@ See [AGENTS.md](AGENTS.md) for:
 - Code style and naming conventions  
 - Architecture patterns and best practices
 - Team structure and responsibilities
+
+## Roadmap
+
+- [ ] Activity comparison (overlay multiple routes)
+- [ ] FIT file support (Garmin device format)
+- [ ] Export to CSV / GPX download
+- [ ] Personal records and statistics dashboard
+- [ ] Strava / Garmin Connect import integration
 
 ## Contributing
 
