@@ -141,6 +141,7 @@ else
 }
 
 @inject webapp.Services.ActivityStore ActivityStore
+@inject webapp.Services.ActivityApiClient ActivityApiClient
 
 @code {
     private List<webapp.Services.ActivitySummary>? activities;
@@ -175,13 +176,20 @@ else
         }
     }
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        LoadActivities();
+        await LoadActivitiesAsync();
     }
 
-    private void LoadActivities()
+    private async Task LoadActivitiesAsync()
     {
+        // Seed store from API if empty (e.g. after restart)
+        if (!ActivityStore.Activities.Any())
+        {
+            var apiActivities = await ActivityApiClient.GetAllActivitiesAsync();
+            foreach (var a in apiActivities)
+                ActivityStore.Add(a);
+        }
         activities = ActivityStore.Activities.ToList();
     }
 
