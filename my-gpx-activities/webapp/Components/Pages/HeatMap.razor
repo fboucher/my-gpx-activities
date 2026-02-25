@@ -1,0 +1,190 @@
+@page "/heatmap"
+@attribute [StreamRendering(true)]
+@implements IAsyncDisposable
+
+@inject webapp.Services.HeatMapApiClient HeatMapClient
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Heat Map</PageTitle>
+
+<MudText Typo="Typo.h3" GutterBottom="true">Heat Map</MudText>
+<MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+    View all your GPS activity traces on a single map.
+</MudText>
+
+<MudGrid Class="mb-4">
+    <!-- Date range filters -->
+    <MudItem xs="12" sm="6" md="3">
+        <MudDatePicker Label="From date"
+                       Date="_dateFrom"
+                       DateChanged="d => _dateFrom = d"
+                       DateFormat="yyyy-MM-dd"
+                       Clearable="true"
+                       Variant="Variant.Outlined" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudDatePicker Label="To date"
+                       Date="_dateTo"
+                       DateChanged="d => _dateTo = d"
+                       DateFormat="yyyy-MM-dd"
+                       Clearable="true"
+                       Variant="Variant.Outlined" />
+    </MudItem>
+
+    <!-- Sport type checkboxes -->
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-3" Elevation="1">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Sport Types</MudText>
+            @if (_sportTypes.Count == 0)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">No sport types found</MudText>
+            }
+            else
+            {
+                <MudStack Spacing="0">
+                    @foreach (var sport in _sportTypes)
+                    {
+                        var s = sport;
+                        <MudCheckBox T="bool"
+                                     Value="@_selectedSports.Contains(s)"
+                                     ValueChanged="@((bool v) => ToggleSport(s, v))"
+                                     Label="@s"
+                                     Color="Color.Primary"
+                                     Dense="true" />
+                    }
+                </MudStack>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <!-- Apply button -->
+    <MudItem xs="12" md="2" Class="d-flex align-end">
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Map"
+                   OnClick="ApplyFilters"
+                   Disabled="@_loading"
+                   FullWidth="true">
+            @if (_loading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Loading...</span>
+            }
+            else
+            {
+                <span>Apply Filters</span>
+            }
+        </MudButton>
+    </MudItem>
+</MudGrid>
+
+@if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">@_errorMessage</MudAlert>
+}
+
+<MudCard>
+    <MudCardContent Class="pa-0">
+        <div id="heatmap" style="height: 600px; width: 100%; border-radius: 4px;"></div>
+    </MudCardContent>
+</MudCard>
+
+@if (_activities.Count > 0)
+{
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+        Showing @_activities.Count activit@(_activities.Count == 1 ? "y" : "ies")
+    </MudText>
+}
+
+@code {
+    private List<webapp.Services.HeatMapTrackActivity> _activities = [];
+    private List<string> _sportTypes = [];
+    private HashSet<string> _selectedSports = [];
+    private DateTime? _dateFrom;
+    private DateTime? _dateTo;
+    private bool _loading = false;
+    private string? _errorMessage;
+    private bool _mapInitialized = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _sportTypes = await HeatMapClient.GetSportTypesAsync();
+            _selectedSports = [.. _sportTypes];
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load sport types: {ex.Message}";
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("initializeHeatMap", "heatmap");
+            _mapInitialized = true;
+            await LoadAndDrawActivities();
+        }
+    }
+
+    private void ToggleSport(string sport, bool selected)
+    {
+        if (selected) _selectedSports.Add(sport);
+        else _selectedSports.Remove(sport);
+    }
+
+    private async Task ApplyFilters()
+    {
+        await LoadAndDrawActivities();
+    }
+
+    private async Task LoadAndDrawActivities()
+    {
+        if (!_mapInitialized) return;
+
+        _loading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var from = _dateFrom.HasValue ? DateOnly.FromDateTime(_dateFrom.Value) : (DateOnly?)null;
+            var to = _dateTo.HasValue ? DateOnly.FromDateTime(_dateTo.Value) : (DateOnly?)null;
+            var sports = _selectedSports.Count > 0 ? _selectedSports : null;
+
+            _activities = await HeatMapClient.GetHeatMapActivitiesAsync(from, to, sports);
+
+            var payload = _activities.Select(a => new
+            {
+                activityName = a.ActivityName,
+                sportType = a.SportType,
+                trackPoints = a.TrackPoints
+            }).ToArray();
+
+            await JSRuntime.InvokeVoidAsync("drawHeatMapTraces", (object)payload);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load activities: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("destroyHeatMap");
+        }
+        catch
+        {
+            // Ignore JS errors during disposal
+        }
+    }
+}
