@@ -117,7 +117,8 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
             activity.MaxSpeedMs,
             TrackPoints = activity.TrackPointCount,
             activity.CreatedAt,
-            TrackCoordinates = trackCoordinates
+            TrackCoordinates = trackCoordinates,
+            TrackData = trackData
         };
 
         return Results.Created($"/api/activities/{activity.Id}", response);
@@ -211,7 +212,8 @@ app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxPars
                     activity.MaxSpeedMs,
                     TrackPoints = activity.TrackPointCount,
                     activity.CreatedAt,
-                    TrackCoordinates = trackCoordinates
+                    TrackCoordinates = trackCoordinates,
+                    TrackData = trackData
                 };
 
                 return result with { Success = true, Activity = activityResponse };
@@ -361,7 +363,8 @@ app.MapPost("/api/activities/smart-merge/import", async (HttpRequest request, IS
             activity.MaxSpeedMs,
             TrackPoints = activity.TrackPointCount,
             activity.CreatedAt,
-            TrackCoordinates = trackCoordinates
+            TrackCoordinates = trackCoordinates,
+            TrackData = trackData
         };
 
         return Results.Created($"/api/activities/{activity.Id}", response);
