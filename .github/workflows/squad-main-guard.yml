@@ -1,5 +1,9 @@
 name: Squad Protected Branch Guard
 
+# IMPORTANT: This workflow must be set as a required status check in GitHub branch protection
+# for main. Without it being required, PRs can merge despite this check failing.
+# To configure: Settings → Branches → Branch protection rules → main → Require status checks → "guard"
+
 on:
   pull_request:
     branches: [main, preview, insider]
