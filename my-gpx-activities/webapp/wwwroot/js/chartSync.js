@@ -141,6 +141,11 @@ window.initActivityCharts = function(trackData, mapId) {
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
+                    interaction: {
+                        mode: 'index',
+                        axis: 'x',
+                        intersect: false
+                    },
                     plugins: { legend: { display: false }, crosshair: {} },
                     scales: { x: { ticks: { maxTicksLimit: 10 } } },
                     onHover: null  // set after both charts created
@@ -174,6 +179,11 @@ window.initActivityCharts = function(trackData, mapId) {
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
+                    interaction: {
+                        mode: 'index',
+                        axis: 'x',
+                        intersect: false
+                    },
                     plugins: { legend: { display: false }, crosshair: {} },
                     scales: { x: { ticks: { maxTicksLimit: 10 } } },
                     onHover: null
@@ -208,6 +218,11 @@ window.initActivityCharts = function(trackData, mapId) {
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
+                    interaction: {
+                        mode: 'index',
+                        axis: 'x',
+                        intersect: false
+                    },
                     plugins: { legend: { display: false }, crosshair: {} },
                     scales: {
                         x: { ticks: { maxTicksLimit: 10 } },
@@ -255,6 +270,11 @@ window.initActivityCharts = function(trackData, mapId) {
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
+                    interaction: {
+                        mode: 'index',
+                        axis: 'x',
+                        intersect: false
+                    },
                     plugins: { legend: { display: false }, crosshair: {} },
                     scales: { x: { ticks: { maxTicksLimit: 10 } } },
                     onHover: null
