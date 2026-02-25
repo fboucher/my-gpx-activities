@@ -3,3 +3,6 @@
 .squad/agents/*/history.md merge=union
 .squad/log/** merge=union
 .squad/orchestration-log/** merge=union
+
+# Squad: collapse in GitHub PR diffs (belt-and-suspenders)
+.squad/** linguist-generated=true
