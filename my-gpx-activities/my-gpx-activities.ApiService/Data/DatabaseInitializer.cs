@@ -59,8 +59,14 @@ public class DatabaseInitializer : IDatabaseInitializer
                         max_speed_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
                         track_point_count INTEGER NOT NULL DEFAULT 0,
                         track_coordinates_json JSONB,
+                        track_data_json JSONB,
                         created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
                     );
+                    """);
+
+                // Migrate existing tables: add track_data_json if missing
+                await connection.ExecuteAsync("""
+                    ALTER TABLE activities ADD COLUMN IF NOT EXISTS track_data_json JSONB;
                     """);
 
                 // Create index on activities for faster queries

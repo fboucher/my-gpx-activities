@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\my-gpx-activities.AppHost\my-gpx-activities.AppHost.csproj" />
+    <ProjectReference Include="..\my-gpx-activities.ApiService\my-gpx-activities.ApiService.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +28,12 @@
     <Using Include="Aspire.Hosting.ApplicationModel" />
     <Using Include="Aspire.Hosting.Testing" />
     <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="TestData\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

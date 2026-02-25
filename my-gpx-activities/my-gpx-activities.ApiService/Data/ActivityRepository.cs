@@ -30,6 +30,7 @@ public class ActivityRepository : IActivityRepository
                 max_speed_ms,
                 track_point_count,
                 track_coordinates_json,
+                track_data_json,
                 created_at
             FROM activities
             ORDER BY start_date_time DESC
@@ -56,6 +57,7 @@ public class ActivityRepository : IActivityRepository
                 max_speed_ms,
                 track_point_count,
                 track_coordinates_json,
+                track_data_json,
                 created_at
             FROM activities
             WHERE id = @Id
@@ -82,6 +84,7 @@ public class ActivityRepository : IActivityRepository
                 max_speed_ms,
                 track_point_count,
                 track_coordinates_json,
+                track_data_json,
                 created_at
             ) VALUES (
                 @Id,
@@ -96,6 +99,7 @@ public class ActivityRepository : IActivityRepository
                 @MaxSpeedMs,
                 @TrackPointCount,
                 @TrackCoordinatesJson::jsonb,
+                @TrackDataJson::jsonb,
                 @CreatedAt
             )
             RETURNING id
@@ -113,6 +117,7 @@ public class ActivityRepository : IActivityRepository
                 activity.MaxSpeedMs,
                 activity.TrackPointCount,
                 activity.TrackCoordinatesJson,
+                activity.TrackDataJson,
                 activity.CreatedAt
             });
 
@@ -135,7 +140,8 @@ public class ActivityRepository : IActivityRepository
                 average_speed_ms = @AverageSpeedMs,
                 max_speed_ms = @MaxSpeedMs,
                 track_point_count = @TrackPointCount,
-                track_coordinates_json = @TrackCoordinatesJson::jsonb
+                track_coordinates_json = @TrackCoordinatesJson::jsonb,
+                track_data_json = @TrackDataJson::jsonb
             WHERE id = @Id
             """, new
             {
@@ -150,7 +156,8 @@ public class ActivityRepository : IActivityRepository
                 activity.AverageSpeedMs,
                 activity.MaxSpeedMs,
                 activity.TrackPointCount,
-                activity.TrackCoordinatesJson
+                activity.TrackCoordinatesJson,
+                activity.TrackDataJson
             });
 
         return rowsAffected > 0;
@@ -203,7 +210,50 @@ public class ActivityRepository : IActivityRepository
         ));
     }
 
-    private static Activity MapToActivity(ActivityDto dto)
+    public async Task<IEnumerable<HeatMapActivity>> GetActivitiesForHeatMapAsync(DateOnly? from, DateOnly? to, string[]? sportTypes)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync();
+
+        var conditions = new List<string>();
+        if (from.HasValue)
+            conditions.Add("start_date_time >= @From");
+        if (to.HasValue)
+            conditions.Add("start_date_time < @To");
+        if (sportTypes is { Length: > 0 })
+            conditions.Add("activity_type = ANY(@SportTypes)");
+
+        var where = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : string.Empty;
+
+        var sql = $"""
+            SELECT
+                id,
+                title,
+                activity_type,
+                track_coordinates_json
+            FROM activities
+            {where}
+            ORDER BY start_date_time DESC
+            """;
+
+        var rows = await connection.QueryAsync<HeatMapDto>(sql, new
+        {
+            From = from.HasValue ? from.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) : (DateTime?)null,
+            To = to.HasValue ? to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) : (DateTime?)null,
+            SportTypes = sportTypes
+        });
+
+        return rows.Select(dto => new HeatMapActivity
+        {
+            ActivityId = dto.Id,
+            ActivityName = dto.Title,
+            SportType = dto.Activity_Type,
+            TrackPoints = string.IsNullOrEmpty(dto.Track_Coordinates_Json)
+                ? []
+                : System.Text.Json.JsonSerializer.Deserialize<double[][]>(dto.Track_Coordinates_Json) ?? []
+        });
+    }
+
+        private static Activity MapToActivity(ActivityDto dto)
     {
         return new Activity
         {
@@ -219,8 +269,17 @@ public class ActivityRepository : IActivityRepository
             MaxSpeedMs = dto.Max_Speed_Ms,
             TrackPointCount = dto.Track_Point_Count,
             TrackCoordinatesJson = dto.Track_Coordinates_Json,
+            TrackDataJson = dto.Track_Data_Json,
             CreatedAt = dto.Created_At
         };
+    }
+
+    private class HeatMapDto
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Activity_Type { get; set; } = string.Empty;
+        public string? Track_Coordinates_Json { get; set; }
     }
 
     // DTO class to handle PostgreSQL snake_case column names
@@ -238,6 +297,7 @@ public class ActivityRepository : IActivityRepository
         public double Max_Speed_Ms { get; set; }
         public int Track_Point_Count { get; set; }
         public string? Track_Coordinates_Json { get; set; }
+        public string? Track_Data_Json { get; set; }
         public DateTime Created_At { get; set; }
     }
 

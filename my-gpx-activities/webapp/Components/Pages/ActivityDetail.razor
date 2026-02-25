@@ -1,5 +1,6 @@
 @page "/activities/{id:guid}"
 @attribute [StreamRendering(true)]
+@implements IAsyncDisposable
 
 <PageTitle>Activity Details</PageTitle>
 
@@ -64,6 +65,70 @@ else
             <div id="map" style="height: 400px; width: 100%; border-radius: 4px;"></div>
         </MudCardContent>
     </MudCard>
+
+    @if (activity.TrackData != null && activity.TrackData.Any(p => p[2] != null))
+    {
+        <MudCard Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h5">Elevation</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <div style="position: relative; height: 200px;">
+                    <canvas id="elevationChart"></canvas>
+                </div>
+            </MudCardContent>
+        </MudCard>
+    }
+
+    @if (activity.TrackData?.Any(p => p.Length > 4 && p[4] != null) == true)
+    {
+        <MudCard Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h5">Pace</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <div style="position: relative; height: 200px;">
+                    <canvas id="paceChart"></canvas>
+                </div>
+            </MudCardContent>
+        </MudCard>
+    }
+
+    @if (activity.TrackData != null && activity.TrackData.Any(p => p[3] != null))
+    {
+        <MudCard Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h5">Heart Rate</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <div style="position: relative; height: 200px;">
+                    <canvas id="hrChart"></canvas>
+                </div>
+            </MudCardContent>
+        </MudCard>
+    }
+
+    @if (activity.TrackData?.Any(p => p.Length > 5 && p[5] != null) == true)
+    {
+        <MudCard Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h5">Cadence</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <div style="position: relative; height: 200px;">
+                    <canvas id="cadenceChart"></canvas>
+                </div>
+            </MudCardContent>
+        </MudCard>
+    }
 
     <MudGrid>
         <MudItem xs="12" md="6">
@@ -175,6 +240,10 @@ else
         if (firstRender && activity != null)
         {
             await InitializeMap();
+            if (activity.TrackData != null && activity.TrackData.Any())
+            {
+                await JSRuntime.InvokeVoidAsync("initActivityCharts", activity.TrackData, "map");
+            }
         }
     }
 
@@ -201,7 +270,8 @@ else
             AverageSpeedMs = storedActivity.AverageSpeedMs,
             MaxSpeedMs = storedActivity.MaxSpeedMs,
             TrackPoints = storedActivity.TrackPoints,
-            TrackCoordinates = storedActivity.TrackCoordinates
+            TrackCoordinates = storedActivity.TrackCoordinates,
+            TrackData = storedActivity.TrackData
         };
     }
 
@@ -261,5 +331,12 @@ else
         public double MaxSpeedMs { get; set; }
         public int TrackPoints { get; set; }
         public List<double[]>? TrackCoordinates { get; set; }
+        public List<double?[]>? TrackData { get; set; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JSRuntime.InvokeVoidAsync("destroyActivityCharts"); }
+        catch { }
     }
 }

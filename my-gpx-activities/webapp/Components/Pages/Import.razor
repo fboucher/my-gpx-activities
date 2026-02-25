@@ -61,6 +61,95 @@
     </MudCardContent>
 </MudCard>
 
+<MudStack AlignItems="AlignItems.Center" Class="my-6">
+    <MudText Typo="Typo.caption" Color="Color.Default">— or —</MudText>
+</MudStack>
+
+<MudCard Class="pa-4">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h5">Smart Merge: Enrich GPX with Heart Rate</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Merge a GPX file with a Garmin FIT file to add heart-rate data, then save it as an activity.
+            </MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">GPX File</MudText>
+                <MudFileUpload T="IBrowserFile"
+                               FilesChanged="HandleMergeGpxChanged"
+                               Accept=".gpx"
+                               MaximumFileCount="1"
+                               Class="mb-2">
+                    <ActivatorContent>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Secondary"
+                                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                                   Size="Size.Medium">
+                            Select GPX File
+                        </MudButton>
+                    </ActivatorContent>
+                </MudFileUpload>
+                @if (mergeGpxFile != null)
+                {
+                    <MudChip T="string"
+                             Text="@(mergeGpxFile.Name + $" ({FormatFileSize(mergeGpxFile.Size)})")"
+                             Size="Size.Small"
+                             Color="Color.Secondary"
+                             Variant="Variant.Filled"
+                             OnClose="() => { mergeGpxFile = null; StateHasChanged(); }" />
+                }
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">FIT File</MudText>
+                <MudFileUpload T="IBrowserFile"
+                               FilesChanged="HandleMergeFitChanged"
+                               Accept=".fit"
+                               MaximumFileCount="1"
+                               Class="mb-2">
+                    <ActivatorContent>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Secondary"
+                                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                                   Size="Size.Medium">
+                            Select FIT File
+                        </MudButton>
+                    </ActivatorContent>
+                </MudFileUpload>
+                @if (mergeFitFile != null)
+                {
+                    <MudChip T="string"
+                             Text="@(mergeFitFile.Name + $" ({FormatFileSize(mergeFitFile.Size)})")"
+                             Size="Size.Small"
+                             Color="Color.Secondary"
+                             Variant="Variant.Filled"
+                             OnClose="() => { mergeFitFile = null; StateHasChanged(); }" />
+                }
+            </MudItem>
+        </MudGrid>
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Secondary"
+                   StartIcon="@Icons.Material.Filled.Merge"
+                   Size="Size.Large"
+                   Class="mt-4"
+                   Disabled="@(mergeGpxFile == null || mergeFitFile == null || isMerging)"
+                   OnClick="MergeAndImport">
+            @if (isMerging)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ms-2">Merging...</MudText>
+            }
+            else
+            {
+                <MudText>Merge & Import</MudText>
+            }
+        </MudButton>
+    </MudCardContent>
+</MudCard>
+
 @if (uploadedActivities.Any())
 {
     <MudCard Class="mt-4">
@@ -121,10 +210,98 @@
     private List<webapp.Services.ActivitySummary> uploadedActivities = new();
     private bool isUploading;
 
+    private IBrowserFile? mergeGpxFile;
+    private IBrowserFile? mergeFitFile;
+    private bool isMerging;
+
     private void HandleFilesChanged(IReadOnlyList<IBrowserFile> files)
     {
         selectedFiles = files;
         StateHasChanged();
+    }
+
+    private void HandleMergeGpxChanged(IBrowserFile? file)
+    {
+        mergeGpxFile = file;
+        StateHasChanged();
+    }
+
+    private void HandleMergeFitChanged(IBrowserFile? file)
+    {
+        mergeFitFile = file;
+        StateHasChanged();
+    }
+
+    private async Task MergeAndImport()
+    {
+        if (mergeGpxFile == null || mergeFitFile == null)
+            return;
+
+        isMerging = true;
+        StateHasChanged();
+
+        try
+        {
+            // Validate file sizes
+            if (mergeGpxFile.Size > 10 * 1024 * 1024)
+            {
+                throw new Exception($"GPX file is too large. Maximum size is 10MB.");
+            }
+            if (mergeFitFile.Size > 10 * 1024 * 1024)
+            {
+                throw new Exception($"FIT file is too large. Maximum size is 10MB.");
+            }
+
+            using var client = HttpClientFactory.CreateClient("ApiService");
+            using var content = new MultipartFormDataContent();
+
+            // Read GPX file into memory
+            using var gpxStream = mergeGpxFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            using var gpxMemoryStream = new MemoryStream();
+            await gpxStream.CopyToAsync(gpxMemoryStream);
+            var gpxContent = new ByteArrayContent(gpxMemoryStream.ToArray());
+            gpxContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+            content.Add(gpxContent, "gpx", mergeGpxFile.Name);
+
+            // Read FIT file into memory
+            using var fitStream = mergeFitFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            using var fitMemoryStream = new MemoryStream();
+            await fitStream.CopyToAsync(fitMemoryStream);
+            var fitContent = new ByteArrayContent(fitMemoryStream.ToArray());
+            fitContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+            content.Add(fitContent, "fit", mergeFitFile.Name);
+
+            var response = await client.PostAsync("api/activities/smart-merge/import", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var activity = await response.Content.ReadFromJsonAsync<webapp.Services.ActivitySummary>();
+                if (activity != null)
+                {
+                    uploadedActivities.Add(activity);
+                    ActivityStore.Add(activity);
+                    Snackbar.Add("Files merged and imported successfully!", Severity.Success);
+                }
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                throw new Exception($"Merge failed: {errorContent}");
+            }
+
+            // Clear the selected files
+            mergeGpxFile = null;
+            mergeFitFile = null;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Merge failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isMerging = false;
+            StateHasChanged();
+        }
     }
 
     private async Task UploadFiles()

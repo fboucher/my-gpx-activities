@@ -37,4 +37,5 @@ public class ActivitySummary
     public int TrackPoints { get; set; }
     public DateTime CreatedAt { get; set; }
     public List<double[]>? TrackCoordinates { get; set; }
+    public List<double?[]>? TrackData { get; set; }
 }
