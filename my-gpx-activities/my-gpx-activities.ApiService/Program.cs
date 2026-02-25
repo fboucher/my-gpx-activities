@@ -18,6 +18,8 @@ builder.Services.AddScoped<IDatabaseInitializer, DatabaseInitializer>();
 builder.Services.AddScoped<IActivityRepository, ActivityRepository>();
 builder.Services.AddScoped<IActivityTypeRepository, ActivityTypeRepository>();
 builder.Services.AddScoped<IGpxParserService, GpxParserService>();
+builder.Services.AddScoped<IFitParserService, FitParserService>();
+builder.Services.AddScoped<ISmartMergeService, SmartMergeService>();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -113,6 +115,45 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
     }
 })
 .WithName("ImportGpxActivity");
+
+app.MapPost("/api/activities/smart-merge", async (HttpRequest request, ISmartMergeService smartMerge) =>
+{
+    try
+    {
+        var form = await request.ReadFormAsync();
+        var gpxFile = form.Files.GetFile("gpx");
+        var fitFile = form.Files.GetFile("fit");
+
+        if (gpxFile == null || gpxFile.Length == 0)
+            return Results.BadRequest("No GPX file provided (field: 'gpx').");
+
+        if (fitFile == null || fitFile.Length == 0)
+            return Results.BadRequest("No FIT file provided (field: 'fit').");
+
+        if (!gpxFile.FileName.EndsWith(".gpx", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest("The 'gpx' file must have a .gpx extension.");
+
+        if (!fitFile.FileName.EndsWith(".fit", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest("The 'fit' file must have a .fit extension.");
+
+        await using var gpxStream = gpxFile.OpenReadStream();
+        await using var fitStream = fitFile.OpenReadStream();
+
+        var mergedGpx = await smartMerge.MergeAsync(gpxStream, fitStream);
+
+        return Results.Content(mergedGpx, "application/gpx+xml", System.Text.Encoding.UTF8);
+    }
+    catch (InvalidDataException ex)
+    {
+        return Results.BadRequest($"Invalid file format: {ex.Message}");
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error merging files: {ex.Message}");
+    }
+})
+.WithName("SmartMergeGpxFit")
+.WithDescription("Merge a GPX file with a FIT file, enriching trackpoints with heart-rate data matched by timestamp.");
 
 app.MapGet("/api/activities", async (IActivityRepository repository) =>
 {
