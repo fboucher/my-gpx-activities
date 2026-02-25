@@ -258,6 +258,88 @@ app.MapPost("/api/activities/smart-merge", async (HttpRequest request, ISmartMer
 .WithName("SmartMergeGpxFit")
 .WithDescription("Merge a GPX file with a FIT file, enriching trackpoints with heart-rate data matched by timestamp.");
 
+app.MapPost("/api/activities/smart-merge/import", async (HttpRequest request, ISmartMergeService smartMerge, IGpxParserService gpxParser, IActivityRepository activityRepository) =>
+{
+    try
+    {
+        var form = await request.ReadFormAsync();
+        var gpxFile = form.Files.GetFile("gpx");
+        var fitFile = form.Files.GetFile("fit");
+
+        if (gpxFile == null || gpxFile.Length == 0)
+            return Results.BadRequest("No GPX file provided (field: 'gpx').");
+
+        if (fitFile == null || fitFile.Length == 0)
+            return Results.BadRequest("No FIT file provided (field: 'fit').");
+
+        if (!gpxFile.FileName.EndsWith(".gpx", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest("The 'gpx' file must have a .gpx extension.");
+
+        if (!fitFile.FileName.EndsWith(".fit", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest("The 'fit' file must have a .fit extension.");
+
+        await using var gpxStream = gpxFile.OpenReadStream();
+        await using var fitStream = fitFile.OpenReadStream();
+
+        var mergedGpx = await smartMerge.MergeAsync(gpxStream, fitStream);
+
+        await using var mergedStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(mergedGpx));
+        var activityData = await gpxParser.ParseGpxAsync(mergedStream);
+
+        var trackCoordinates = activityData.TrackPoints
+            .Select(tp => new[] { tp.Latitude, tp.Longitude })
+            .ToList();
+
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            Title = activityData.Title,
+            StartDateTime = activityData.StartDateTime,
+            EndDateTime = activityData.EndDateTime,
+            ActivityType = activityData.ActivityType,
+            DistanceMeters = activityData.DistanceMeters,
+            ElevationGainMeters = activityData.ElevationGainMeters,
+            ElevationLossMeters = activityData.ElevationLossMeters,
+            AverageSpeedMs = activityData.AverageSpeedMs,
+            MaxSpeedMs = activityData.MaxSpeedMs,
+            TrackPointCount = activityData.TrackPoints.Count,
+            TrackCoordinatesJson = JsonSerializer.Serialize(trackCoordinates),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await activityRepository.CreateActivityAsync(activity);
+
+        var response = new
+        {
+            activity.Id,
+            activity.Title,
+            activity.StartDateTime,
+            activity.EndDateTime,
+            activity.ActivityType,
+            activity.DistanceMeters,
+            activity.ElevationGainMeters,
+            activity.ElevationLossMeters,
+            activity.AverageSpeedMs,
+            activity.MaxSpeedMs,
+            TrackPoints = activity.TrackPointCount,
+            activity.CreatedAt,
+            TrackCoordinates = trackCoordinates
+        };
+
+        return Results.Created($"/api/activities/{activity.Id}", response);
+    }
+    catch (InvalidDataException ex)
+    {
+        return Results.BadRequest($"Invalid file format: {ex.Message}");
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error processing files: {ex.Message}");
+    }
+})
+.WithName("SmartMergeAndImportActivity")
+.WithDescription("Merge a GPX file with a FIT file to enrich heart-rate data, then save as a new activity");
+
 app.MapGet("/api/activities", async (IActivityRepository repository) =>
 {
     var activities = await repository.GetAllActivitiesAsync();
