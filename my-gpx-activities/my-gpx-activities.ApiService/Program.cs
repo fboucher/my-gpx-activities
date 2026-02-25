@@ -292,6 +292,22 @@ app.MapGet("/api/statistics/by-sport", async (IActivityRepository repository) =>
 .WithName("GetStatisticsBySport")
 .WithDescription("Get aggregated statistics grouped by sport type");
 
+app.MapGet("/api/activities/heatmap", async (
+    IActivityRepository repository,
+    DateOnly? dateFrom,
+    DateOnly? dateTo,
+    string? sportTypes) =>
+{
+    string[]? sportTypesArray = string.IsNullOrWhiteSpace(sportTypes)
+        ? null
+        : sportTypes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    var activities = await repository.GetActivitiesForHeatMapAsync(dateFrom, dateTo, sportTypesArray);
+    return Results.Ok(activities);
+})
+.WithName("GetHeatMapActivities")
+.WithDescription("Get GPS track points for all activities, optionally filtered by date range and sport types, for heat map rendering");
+
 app.MapDefaultEndpoints();
 
 await app.RunAsync();

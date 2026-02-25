@@ -203,7 +203,50 @@ public class ActivityRepository : IActivityRepository
         ));
     }
 
-    private static Activity MapToActivity(ActivityDto dto)
+    public async Task<IEnumerable<HeatMapActivity>> GetActivitiesForHeatMapAsync(DateOnly? from, DateOnly? to, string[]? sportTypes)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync();
+
+        var conditions = new List<string>();
+        if (from.HasValue)
+            conditions.Add("start_date_time >= @From");
+        if (to.HasValue)
+            conditions.Add("start_date_time < @To");
+        if (sportTypes is { Length: > 0 })
+            conditions.Add("activity_type = ANY(@SportTypes)");
+
+        var where = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : string.Empty;
+
+        var sql = $"""
+            SELECT
+                id,
+                title,
+                activity_type,
+                track_coordinates_json
+            FROM activities
+            {where}
+            ORDER BY start_date_time DESC
+            """;
+
+        var rows = await connection.QueryAsync<HeatMapDto>(sql, new
+        {
+            From = from.HasValue ? from.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) : (DateTime?)null,
+            To = to.HasValue ? to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) : (DateTime?)null,
+            SportTypes = sportTypes
+        });
+
+        return rows.Select(dto => new HeatMapActivity
+        {
+            ActivityId = dto.Id,
+            ActivityName = dto.Title,
+            SportType = dto.Activity_Type,
+            TrackPoints = string.IsNullOrEmpty(dto.Track_Coordinates_Json)
+                ? []
+                : System.Text.Json.JsonSerializer.Deserialize<double[][]>(dto.Track_Coordinates_Json) ?? []
+        });
+    }
+
+        private static Activity MapToActivity(ActivityDto dto)
     {
         return new Activity
         {
@@ -221,6 +264,14 @@ public class ActivityRepository : IActivityRepository
             TrackCoordinatesJson = dto.Track_Coordinates_Json,
             CreatedAt = dto.Created_At
         };
+    }
+
+    private class HeatMapDto
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Activity_Type { get; set; } = string.Empty;
+        public string? Track_Coordinates_Json { get; set; }
     }
 
     // DTO class to handle PostgreSQL snake_case column names
