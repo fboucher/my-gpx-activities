@@ -24,6 +24,7 @@ window.initActivityCharts = function(trackData, mapId) {
     });
 
     // Helper: reduce to ~500 points max for performance
+    // Returns { data: downsampled array, indices: original indices for each downsampled point }
     function downsample(arr, maxPoints) {
         if (arr.length <= maxPoints) return { data: arr, indices: arr.map((_, i) => i) };
         const step = arr.length / maxPoints;
@@ -36,6 +37,9 @@ window.initActivityCharts = function(trackData, mapId) {
         }
         return { data, indices };
     }
+    
+    // Store downsampling index maps for reverse lookup (chart index -> trackData index)
+    let dsIndexMaps = { elevation: null, pace: null, hr: null, cadence: null };
 
     // Haversine distance between two lat/lon points in meters
     function haversine(lat1, lon1, lat2, lon2) {
@@ -94,20 +98,22 @@ window.initActivityCharts = function(trackData, mapId) {
     };
     Chart.register(crosshairPlugin);
 
-    function makeHoverHandler(charts) {
+    function makeHoverHandler(charts, indexMap) {
         return function(evt, active) {
             if (!active || active.length === 0) return;
-            const idx = active[0].index;
-            // Map marker
-            if (syncMarker && trackData[idx]) {
-                syncMarker.setLatLng([trackData[idx][0], trackData[idx][1]]);
+            const chartIdx = active[0].index;
+            // Map chart index back to original trackData index
+            const originalIdx = indexMap ? indexMap[chartIdx] : chartIdx;
+            // Map marker — use original trackData index
+            if (syncMarker && trackData[originalIdx]) {
+                syncMarker.setLatLng([trackData[originalIdx][0], trackData[originalIdx][1]]);
             }
             // Sync crosshair on all charts
             charts.forEach(c => {
                 if (!c) return;
                 const meta = c.getDatasetMeta(0);
-                if (meta.data[idx]) {
-                    c._activeCrosshairX = meta.data[idx].x;
+                if (meta.data[chartIdx]) {
+                    c._activeCrosshairX = meta.data[chartIdx].x;
                 } else {
                     c._activeCrosshairX = null;
                 }
@@ -120,6 +126,7 @@ window.initActivityCharts = function(trackData, mapId) {
     if (hasElevation) {
         const eleVals = trackData.map(p => p[2]);
         const ds = downsample(eleVals, 500);
+        dsIndexMaps.elevation = ds.indices;
         const dsLabels = ds.indices.map(i => labels[i]);
         const ctx = document.getElementById('elevationChart');
         if (ctx) {
@@ -158,6 +165,7 @@ window.initActivityCharts = function(trackData, mapId) {
     if (hasHR) {
         const hrVals = trackData.map(p => p[3]);
         const ds = downsample(hrVals, 500);
+        dsIndexMaps.hr = ds.indices;
         const dsLabels = ds.indices.map(i => labels[i]);
         const ctx = document.getElementById('hrChart');
         if (ctx) {
@@ -196,6 +204,7 @@ window.initActivityCharts = function(trackData, mapId) {
     if (hasTimestamps) {
         const paceVals = computePace();
         const ds = downsample(paceVals, 500);
+        dsIndexMaps.pace = ds.indices;
         const dsLabels = ds.indices.map(i => labels[i]);
         const ctx = document.getElementById('paceChart');
         if (ctx) {
@@ -248,6 +257,7 @@ window.initActivityCharts = function(trackData, mapId) {
     if (hasCadence) {
         const cadVals = trackData.map(p => p.length > 5 ? p[5] : null);
         const ds = downsample(cadVals, 500);
+        dsIndexMaps.cadence = ds.indices;
         const dsLabels = ds.indices.map(i => labels[i]);
         const ctx = document.getElementById('cadenceChart');
         if (ctx) {
@@ -285,7 +295,9 @@ window.initActivityCharts = function(trackData, mapId) {
 
     // Now wire up hover handlers with references to all charts
     const allCharts = [elevationChart, paceChart, hrChart, cadenceChart].filter(c => c != null);
-    const handler = makeHoverHandler(allCharts);
+    // Use the first available index map (all should be consistent since they come from same trackData)
+    const indexMap = dsIndexMaps.elevation || dsIndexMaps.pace || dsIndexMaps.hr || dsIndexMaps.cadence;
+    const handler = makeHoverHandler(allCharts, indexMap);
     allCharts.forEach(c => {
         c.options.onHover = handler;
         c.update();
