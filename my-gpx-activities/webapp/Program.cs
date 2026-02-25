@@ -33,6 +33,7 @@ builder.Services.AddMudServices();
 // Add activity store (in-memory for now, will be replaced with database)
 builder.Services.AddSingleton<ActivityStore>();
 builder.Services.AddTransient<HeatMapApiClient>();
+builder.Services.AddTransient<ActivityApiClient>();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()

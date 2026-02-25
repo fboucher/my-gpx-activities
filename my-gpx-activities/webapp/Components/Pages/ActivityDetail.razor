@@ -221,6 +221,7 @@ else
 </MudStack>
 
 @inject webapp.Services.ActivityStore ActivityStore
+@inject webapp.Services.ActivityApiClient ActivityApiClient
 @inject IJSRuntime JSRuntime
 
 @code {
@@ -230,9 +231,9 @@ else
     private ActivityViewModel? activity;
     private string? errorMessage;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        LoadActivity();
+        await LoadActivityAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -247,9 +248,29 @@ else
         }
     }
 
-    private void LoadActivity()
+    private async Task LoadActivityAsync()
     {
+        // First try in-memory store for fast access
         var storedActivity = ActivityStore.GetById(Id);
+        
+        // If not in store, fetch from API (PostgreSQL)
+        if (storedActivity == null)
+        {
+            try
+            {
+                storedActivity = await ActivityApiClient.GetActivityByIdAsync(Id);
+                if (storedActivity != null)
+                {
+                    // Cache in store for session
+                    ActivityStore.Add(storedActivity);
+                }
+            }
+            catch (Exception)
+            {
+                errorMessage = "Activity not found. It may have been deleted or you may need to import it again.";
+                return;
+            }
+        }
         
         if (storedActivity == null)
         {
