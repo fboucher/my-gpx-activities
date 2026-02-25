@@ -1,0 +1,33 @@
+{
+  "name": "my-gpx-activities",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/dotnet:2": { "version": "10.0" },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "dotnet workload install aspire",
+  "forwardPorts": [15000, 15001, 15002, 15888, 15889, 15890, 8080, 8081],
+  "portsAttributes": {
+    "15888": { "label": "Aspire Dashboard", "onAutoForward": "notify" },
+    "15889": { "label": "API Service", "onAutoForward": "notify" },
+    "15890": { "label": "pgAdmin", "onAutoForward": "notify" },
+    "8080": { "label": "API (direct)", "onAutoForward": "silent" },
+    "8081": { "label": "Webapp (direct)", "onAutoForward": "silent" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csdevkit",
+        "ms-dotnettools.csharp",
+        "ms-azuretools.vscode-docker",
+        "GitHub.copilot",
+        "GitHub.copilot-chat"
+      ],
+      "settings": {
+        "dotnet.defaultSolution": "my-gpx-activities/my-gpx-activities.sln"
+      }
+    }
+  },
+  "remoteUser": "vscode"
+}

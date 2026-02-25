@@ -5,6 +5,7 @@
 [![Docker Beta](https://github.com/fboucher/my-gpx-activities/actions/workflows/docker-beta.yml/badge.svg)](https://github.com/fboucher/my-gpx-activities/actions/workflows/docker-beta.yml)
 [![Docker Hub](https://img.shields.io/docker/pulls/fboucher/my-gpx-activities-api?label=Docker%20Hub)](https://hub.docker.com/r/fboucher/my-gpx-activities-api)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/fboucher/my-gpx-activities)
 
 A .NET 10 Aspire application for managing personal GPX files. Upload, view, and analyze GPS activity data with interactive maps.
 
