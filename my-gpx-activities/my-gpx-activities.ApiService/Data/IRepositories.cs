@@ -10,6 +10,7 @@ public interface IActivityRepository
     Task<bool> UpdateActivityAsync(Activity activity);
     Task<bool> DeleteActivityAsync(Guid id);
     Task<IEnumerable<SportStatistics>> GetStatisticsBySportAsync();
+    Task<IEnumerable<HeatMapActivity>> GetActivitiesForHeatMapAsync(DateOnly? from, DateOnly? to, string[]? sportTypes);
 }
 
 public interface IActivityTypeRepository
