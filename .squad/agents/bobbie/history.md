@@ -35,3 +35,30 @@ Key learnings:
 - Release workflow uses `docker/build-push-action@v6` and `docker/setup-buildx-action@v3` — these are the current stable major versions.
 - Images are named `fboucher/my-gpx-activities-api` and `fboucher/my-gpx-activities-webapp` (two separate repos on Docker Hub).
 - Decision documented in `.squad/decisions/inbox/bobbie-container-setup.md`.
+# History — Bobbie
+
+## Project Context
+**Project:** my-gpx-activities — GPS sports activity visualizer
+**Stack:** .NET 10 Aspire, Blazor Server (MudBlazor), ApiService (Minimal API + OpenAPI), PostgreSQL (Npgsql), NUnit tests
+**Repo layout:**
+- my-gpx-activities.ApiService/ — backend API, GPX/FIT parsing, repositories
+- my-gpx-activities.AppHost/ — Aspire orchestration host
+- my-gpx-activities.webapp/ — Blazor Server frontend
+- my-gpx-activities.ServiceDefaults/ — shared extensions
+- my-gpx-activities.Tests/ — NUnit integration tests
+**User:** fboucher
+
+## Learnings
+
+### 2026-02-25: Dev Container Setup (Issue #37)
+
+Created a dev container configuration for zero-install development in GitHub Codespaces and VS Code Dev Containers.
+
+Key learnings:
+- .NET 10 SDK requires using the base Ubuntu image with the dotnet feature (specifying `version: "10.0"`), rather than a pre-built dotnet image (which typically max out at .NET 9)
+- Docker-in-Docker is essential for Aspire applications to spin up their own services (PostgreSQL, etc.)
+- Port forwarding configuration should include both Aspire dashboard ports (15888-15890) and direct service ports (8080-8081) for flexibility
+- VS Code extensions for C# Dev Kit, Docker, and Copilot enhance the development experience significantly
+- The Aspire workload must be installed in the post-create hook to enable full orchestration capabilities
+- Adding a Codespaces badge to the README with the format `https://codespaces.new/{owner}/{repo}` provides quick access
+- Decision documented in `.squad/decisions/inbox/bobbie-devcontainer.md`
