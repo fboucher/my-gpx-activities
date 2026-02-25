@@ -1,7 +1,0 @@
-{
-  "version": "1.0",
-  "universe": "The Expanse",
-  "max_agents": 25,
-  "allow_overflow": true,
-  "exempt": ["Scribe", "Ralph", "@copilot"]
-}
