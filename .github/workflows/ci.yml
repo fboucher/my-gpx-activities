@@ -29,12 +29,15 @@ jobs:
       
       - name: Restore dependencies
         run: dotnet restore
+        working-directory: my-gpx-activities
       
       - name: Build
         run: dotnet build --no-restore --configuration Release
+        working-directory: my-gpx-activities
       
       - name: Run unit tests
-        run: dotnet test my-gpx-activities/my-gpx-activities.Tests --configuration Release --filter "FullyQualifiedName~FitParserServiceTests" --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=detailed"
+        run: dotnet test my-gpx-activities.Tests --configuration Release --filter "FullyQualifiedName~FitParserServiceTests" --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=detailed"
+        working-directory: my-gpx-activities
       
       - name: Publish test results
         uses: dorny/test-reporter@v1
