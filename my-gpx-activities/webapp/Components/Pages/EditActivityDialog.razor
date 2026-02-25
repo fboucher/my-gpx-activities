@@ -1,0 +1,85 @@
+@using webapp.Services
+@using MudBlazor
+@using static webapp.Services.ActivityApiClient
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="editedTitle" 
+                         Label="Activity Name" 
+                         Variant="Variant.Outlined"
+                         FullWidth="true"
+                         MaxLength="200" />
+            
+            <MudSelect @bind-Value="editedActivityType" 
+                      Label="Sport Type" 
+                      Variant="Variant.Outlined"
+                      FullWidth="true">
+                @foreach (var type in ActivityTypes)
+                {
+                    <MudSelectItem Value="@type.Name">
+                        @if (!string.IsNullOrEmpty(type.Icon))
+                        {
+                            <MudIcon Icon="@type.Icon" Size="Size.Small" Class="mr-2" />
+                        }
+                        @type.Name
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] 
+    public Guid ActivityId { get; set; }
+
+    [Parameter] 
+    public string CurrentTitle { get; set; } = string.Empty;
+
+    [Parameter] 
+    public string CurrentActivityType { get; set; } = string.Empty;
+
+    [Parameter] 
+    public List<ActivityTypeDto> ActivityTypes { get; set; } = new();
+
+    private string editedTitle = string.Empty;
+    private string editedActivityType = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        editedTitle = CurrentTitle;
+        editedActivityType = CurrentActivityType;
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void Save()
+    {
+        var hasChanges = editedTitle != CurrentTitle || editedActivityType != CurrentActivityType;
+        
+        if (!hasChanges)
+        {
+            MudDialog.Cancel();
+            return;
+        }
+
+        var result = new EditActivityResult(
+            editedTitle != CurrentTitle ? editedTitle : null,
+            editedActivityType != CurrentActivityType ? editedActivityType : null
+        );
+
+        MudDialog.Close(DialogResult.Ok(result));
+    }
+}
+

@@ -448,6 +448,42 @@ app.MapGet("/api/activities/{id}", async (Guid id, IActivityRepository repositor
 })
 .WithName("GetActivity");
 
+app.MapPatch("/api/activities/{id}", async (Guid id, UpdateActivityRequest request, IActivityRepository repository) =>
+{
+    var updated = await repository.UpdateActivityPartialAsync(id, request.Title, request.ActivityType);
+    if (updated == null) return Results.NotFound();
+
+    List<double[]>? trackCoordinates = null;
+    if (!string.IsNullOrEmpty(updated.TrackCoordinatesJson))
+        trackCoordinates = JsonSerializer.Deserialize<List<double[]>>(updated.TrackCoordinatesJson);
+
+    List<double?[]>? trackData = null;
+    if (!string.IsNullOrEmpty(updated.TrackDataJson))
+        trackData = JsonSerializer.Deserialize<List<double?[]>>(updated.TrackDataJson);
+
+    var response = new
+    {
+        updated.Id,
+        updated.Title,
+        updated.StartDateTime,
+        updated.EndDateTime,
+        updated.ActivityType,
+        updated.DistanceMeters,
+        updated.ElevationGainMeters,
+        updated.ElevationLossMeters,
+        updated.AverageSpeedMs,
+        updated.MaxSpeedMs,
+        TrackPoints = updated.TrackPointCount,
+        updated.CreatedAt,
+        TrackCoordinates = trackCoordinates,
+        TrackData = trackData
+    };
+
+    return Results.Ok(response);
+})
+.WithName("PatchActivity")
+.WithDescription("Partially update an activity's title and/or sport type");
+
 app.MapDelete("/api/activities/{id}", async (Guid id, IActivityRepository repository) =>
 {
     var deleted = await repository.DeleteActivityAsync(id);
@@ -482,3 +518,5 @@ app.MapGet("/api/activities/heatmap", async (
 app.MapDefaultEndpoints();
 
 await app.RunAsync();
+
+public record UpdateActivityRequest(string? Title, string? ActivityType);
