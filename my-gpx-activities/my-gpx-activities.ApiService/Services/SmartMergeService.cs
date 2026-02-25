@@ -31,9 +31,9 @@ public class SmartMergeService : ISmartMergeService
     {
         var fitPoints = await _fitParser.ParseFitAsync(fitStream);
 
-        // Build sorted list for binary search
+        // Build sorted list for binary search — include all FIT record points with a timestamp
         var fitByTime = fitPoints
-            .Where(p => p.HeartRate.HasValue)
+            .Where(p => p.HeartRate.HasValue || p.Cadence.HasValue)
             .OrderBy(p => p.Timestamp)
             .ToList();
 
@@ -55,7 +55,7 @@ public class SmartMergeService : ISmartMergeService
             var match = FindNearestFitPoint(fitByTime, gpxTime, toleranceSeconds);
             if (match == null) continue;
 
-            EnsureHeartRateExtension(trkpt, match.HeartRate!.Value);
+            EnsureTrackPointExtension(trkpt, match.HeartRate, match.Cadence);
             mergedCount++;
         }
 
@@ -104,8 +104,10 @@ public class SmartMergeService : ISmartMergeService
         return bestDiff <= tolerance ? best : null;
     }
 
-    private void EnsureHeartRateExtension(XElement trkpt, int heartRate)
+    private void EnsureTrackPointExtension(XElement trkpt, int? heartRate, int? cadence)
     {
+        if (!heartRate.HasValue && !cadence.HasValue) return;
+
         var extensions = trkpt.Element(GpxNs + "extensions");
         if (extensions == null)
         {
@@ -120,11 +122,23 @@ public class SmartMergeService : ISmartMergeService
             extensions.Add(tpx);
         }
 
-        var hrElement = tpx.Element(TpxNs + "hr");
-        if (hrElement != null)
-            hrElement.Value = heartRate.ToString();
-        else
-            tpx.Add(new XElement(TpxNs + "hr", heartRate));
+        if (heartRate.HasValue)
+        {
+            var hrElement = tpx.Element(TpxNs + "hr");
+            if (hrElement != null)
+                hrElement.Value = heartRate.Value.ToString();
+            else
+                tpx.Add(new XElement(TpxNs + "hr", heartRate.Value));
+        }
+
+        if (cadence.HasValue)
+        {
+            var cadElement = tpx.Element(TpxNs + "cad");
+            if (cadElement != null)
+                cadElement.Value = cadence.Value.ToString();
+            else
+                tpx.Add(new XElement(TpxNs + "cad", cadence.Value));
+        }
     }
 
     private void EnsureNamespaceDeclarations(XElement root)

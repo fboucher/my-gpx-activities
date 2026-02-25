@@ -1,6 +1,6 @@
 namespace my_gpx_activities.ApiService.Services;
 
-public record FitDataPoint(DateTime Timestamp, int? HeartRate);
+public record FitDataPoint(DateTime Timestamp, int? HeartRate, int? Cadence);
 
 public interface IFitParserService
 {
@@ -52,16 +52,19 @@ public class FitParserService : IFitParserService
                 if (definitions.TryGetValue(localType, out var compDef) && compDef.GlobalMessageNumber == 20)
                 {
                     int? heartRate = null;
+                    int? cadence = null;
                     foreach (var field in compDef.Fields)
                     {
                         if (field.FieldDefNum == 253)
                             continue; // timestamp not present in compressed payload
                         if (field.FieldDefNum == 3 && field.Size == 1)
                             heartRate = data[pos] != 0xFF ? data[pos] : null;
+                        else if (field.FieldDefNum == 4 && field.Size == 1)
+                            cadence = data[pos] != 0xFF ? data[pos] : null;
                         pos += field.Size;
                     }
                     var dt = FitEpoch.AddSeconds(timestamp);
-                    results.Add(new FitDataPoint(dt, heartRate));
+                    results.Add(new FitDataPoint(dt, heartRate, cadence));
                 }
                 else if (definitions.TryGetValue(localType, out var skipDef))
                 {
@@ -117,6 +120,7 @@ public class FitParserService : IFitParserService
                 {
                     uint? timestamp = null;
                     int? heartRate = null;
+                    int? cadence = null;
 
                     foreach (var field in def.Fields)
                     {
@@ -130,6 +134,10 @@ public class FitParserService : IFitParserService
                         {
                             heartRate = data[pos] != 0xFF ? data[pos] : null;
                         }
+                        else if (field.FieldDefNum == 4 && field.Size == 1) // cadence (steps/min raw)
+                        {
+                            cadence = data[pos] != 0xFF ? data[pos] : null;
+                        }
                         pos += field.Size;
                     }
 
@@ -137,7 +145,7 @@ public class FitParserService : IFitParserService
                     {
                         lastTimestamp = timestamp.Value;
                         var dt = FitEpoch.AddSeconds(timestamp.Value);
-                        results.Add(new FitDataPoint(dt, heartRate));
+                        results.Add(new FitDataPoint(dt, heartRate, cadence));
                     }
                 }
                 else

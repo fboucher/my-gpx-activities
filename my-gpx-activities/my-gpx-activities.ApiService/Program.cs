@@ -78,7 +78,8 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
                 tp.Longitude,
                 tp.Elevation,
                 tp.HeartRate,
-                tp.Time.HasValue ? (double?)new DateTimeOffset(tp.Time.Value).ToUnixTimeMilliseconds() : null
+                tp.Time.HasValue ? (double?)new DateTimeOffset(tp.Time.Value).ToUnixTimeMilliseconds() : null,
+                tp.Cadence
             })
             .ToList();
 
@@ -321,7 +322,8 @@ app.MapPost("/api/activities/smart-merge/import", async (HttpRequest request, IS
                 tp.Longitude,
                 tp.Elevation,
                 tp.HeartRate,
-                tp.Time.HasValue ? (double?)new DateTimeOffset(tp.Time.Value).ToUnixTimeMilliseconds() : null
+                tp.Time.HasValue ? (double?)new DateTimeOffset(tp.Time.Value).ToUnixTimeMilliseconds() : null,
+                tp.Cadence
             })
             .ToList();
 
