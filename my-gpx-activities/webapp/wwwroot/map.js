@@ -8,6 +8,7 @@ window.initializeMap = (trackCoordinates) => {
     // Initialize map if not already done
     if (!map) {
         map = L.map('map').setView([45.377, -73.928], 13);
+        window._leafletMap = map;
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors'

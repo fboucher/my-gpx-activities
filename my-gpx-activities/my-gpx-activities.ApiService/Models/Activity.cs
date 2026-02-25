@@ -35,5 +35,8 @@ public class Activity
     // Stored as JSON array of [lat, lon] pairs
     public string? TrackCoordinatesJson { get; set; }
 
+    // Stored as JSON array of [lat, lon, elevation_or_null, hr_or_null, unix_ms_or_null] per trackpoint
+    public string? TrackDataJson { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
