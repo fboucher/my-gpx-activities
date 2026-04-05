@@ -197,3 +197,7 @@ CREATE TABLE IF NOT EXISTS import_errors (
 - `Models/Merge/MergePreviewResponse.cs`
 - `Services/ActivityMergeService.cs`
 - `Program.cs` — +1 using, +1 DI registration, +2 endpoints
+
+---
+
+**2026-04-05:** Issue #41 (Merge Activities) shipped to dev. PR #44 merged. Implemented `ActivityMergeService` with preview/execute endpoints, proper validation, error handling. Build clean. Feature ready for release.

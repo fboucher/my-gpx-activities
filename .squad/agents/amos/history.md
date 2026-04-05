@@ -130,3 +130,7 @@
 - `MergeActivities_MergeMode_PreferMoreDataPointsChannel` exercises conflict resolution indirectly (via trackPoints count) since direct HR channel inspection requires parsing TrackDataJson
 
 **Build:** Compiles cleanly with `dotnet build` — 0 warnings, 0 errors.
+
+---
+
+**2026-04-05:** Issue #41 (Merge Activities) shipped to dev. PR #44 merged. Wrote 11 integration tests: 4 preview, 7 merge (validation, happy path, edge cases). Build clean. Feature ready for release.

@@ -64,3 +64,7 @@
 - **Sport type dropdown**: When both activities have the same sport type, only one `MudSelectItem` is shown. Guard with `if (preview.ActivityBSportType != preview.ActivityASportType)` in the Razor template.
 - **MUD0002 warning**: `Title` is an illegal attribute on `MudIconButton` — use `aria-label` instead for accessibility tooltips on icon buttons.
 - **Merge page not in NavMenu**: The `/merge` route is a transient utility page, not a top-level destination. No nav entry added — consistent with how modal/workflow pages are handled in this app.
+
+---
+
+**2026-04-05:** Issue #41 (Merge Activities) shipped to dev. PR #44 merged. Built merge UI with checkboxes, config page, API client integration. Build clean. Feature ready for release.

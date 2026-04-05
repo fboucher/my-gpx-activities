@@ -567,3 +567,74 @@ Always check `point.length` before accessing index 5.
 
 ### Pace
 Pace is **not** stored in TrackData. Compute in frontend from lat/lon (0, 1) + timestamp (4).
+
+---
+
+## Issue #41: Activity Merge — ID type, point alignment, stats strategy
+
+**Author:** Naomi  
+**Date:** 2026-04-05  
+**Issue:** #41 | **PR:** #44
+
+### ID Type
+The spec called for `int ActivityAId / ActivityBId` in `MergeRequest`, but the `activities` table and all existing models use `Guid` as the primary key. **Decision: use `Guid`** in `MergeRequest` to stay consistent with the rest of the codebase. Frontend passes GUIDs.
+
+### Merge Mode — Point Alignment
+For "merge" mode (overlapping time ranges), each channel is taken from the activity with more data points for that channel. Implementation uses **array-index alignment**: point `i` in the merged output corresponds to point `i` in the GPS-spine activity. This works correctly when both activities have the same number of trackpoints (typical for overlapping activities recorded with the same device). If lengths differ, the merged output is trimmed to the GPS-spine length.
+
+This is a pragmatic simplification. Timestamp-based alignment would be more accurate but significantly more complex — deferred unless fboucher requests it.
+
+### Stats for Merged Activity
+Stats (distance, elevation, speed) are **inherited** from source activities rather than recomputed from raw GPS points. This avoids a full haversine pass over merged trackpoints at insert time. Recomputation can be added later if accuracy becomes a concern.
+
+---
+
+## Issue #41: Merge UI — navigation and API client patterns
+
+**Author:** Alex  
+**Date:** 2026-04-05  
+**Issue:** #41 | **PR:** #44
+
+### NavMenu Integration
+The `/merge` page is a transient workflow page (only reachable via activity list after selecting 2 items). It was intentionally **not** added to the `NavMenu` — consistent with other utility pages (e.g., `/import`, `/activities/{id}`). Navigation happens from within the app rather than from the sidebar.
+
+### API DTOs as Inner Records
+New API DTOs (`MergePreviewDto`, `MergeRequest`, `MergeResponse`) were added as inner `record` types on `ActivityApiClient`, following the existing pattern of `ActivityTypeDto`. This keeps all API shapes co-located with the HTTP client and avoids separate DTO files for lightweight contract types.
+
+---
+
+## Issue #40: Test Organization with Api/ Subdirectory
+
+**Author:** Amos  
+**Date:** 2026-04-05  
+**Issue:** #40  
+**Context:** Creating integration tests for API endpoints
+
+### Decision
+Create an `Api/` subdirectory under `my-gpx-activities.Tests/` for API endpoint-specific integration tests.
+
+**Structure:**
+```
+my-gpx-activities.Tests/
+├── Api/
+│   ├── ActivityMergeTests.cs
+│   └── StravaImportTests.cs
+├── HeatMapApiTests.cs
+├── SmartMergeApiTests.cs
+├── FitParserServiceTests.cs
+└── WebTests.cs
+```
+
+### Rationale
+1. **Scalability**: As more API endpoints are added, test directory avoids clutter
+2. **Organization**: Grouping related tests makes structure clearer
+3. **Consistency**: Common .NET convention to organize tests by type/layer
+4. **Future-proofing**: Leaves room for `Services/`, `Parsers/`, etc.
+
+### Migration Path
+Existing API tests (`HeatMapApiTests.cs`, `SmartMergeApiTests.cs`) can optionally move to `Api/` in future refactoring. No mandate during transition.
+
+### Notes
+- Namespace: `my_gpx_activities.Tests.Api` matches directory structure
+- Build handles subdirectories automatically
+- Applies only to new tests; no mandate to migrate existing tests
