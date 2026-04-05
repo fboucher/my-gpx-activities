@@ -8,7 +8,20 @@ public class ActivityApiClient(IHttpClientFactory httpClientFactory)
 
     public record ActivityTypeDto(string Name, string Icon);
 
+    public record MergePreviewDto(
+        Guid ActivityAId,
+        Guid ActivityBId,
+        string SuggestedMode,
+        string SuggestedName,
+        List<string> ActivityAChannels,
+        List<string> ActivityBChannels,
+        string ActivityASportType,
+        string ActivityBSportType);
+
+    public record MergeRequest(Guid ActivityAId, Guid ActivityBId, string Mode, string SportType, string Name);
+
     private record UpdateActivityRequest(string? Title, string? ActivityType);
+    private record MergeResponse(Guid Id);
 
     public async Task<List<ActivitySummary>> GetAllActivitiesAsync(CancellationToken cancellationToken = default)
     {
@@ -40,5 +53,33 @@ public class ActivityApiClient(IHttpClientFactory httpClientFactory)
         var response = await _client.PatchAsJsonAsync($"/api/activities/{id}", request, cancellationToken);
         if (!response.IsSuccessStatusCode) return null;
         return await response.Content.ReadFromJsonAsync<ActivitySummary>(cancellationToken);
+    }
+
+    public async Task<MergePreviewDto?> GetMergePreviewAsync(Guid activityAId, Guid activityBId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _client.GetFromJsonAsync<MergePreviewDto>(
+                $"/api/activities/merge/preview?activityAId={activityAId}&activityBId={activityBId}",
+                cancellationToken);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<Guid?> MergeActivitiesAsync(MergeRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _client.PostAsJsonAsync("/api/activities/merge", request, cancellationToken);
+        if (!response.IsSuccessStatusCode) return null;
+        var result = await response.Content.ReadFromJsonAsync<MergeResponse>(cancellationToken);
+        return result?.Id;
+    }
+
+    public async Task<bool> DeleteActivityAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var response = await _client.DeleteAsync($"/api/activities/{id}", cancellationToken);
+        return response.IsSuccessStatusCode;
     }
 }

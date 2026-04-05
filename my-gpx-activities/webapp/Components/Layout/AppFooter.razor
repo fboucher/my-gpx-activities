@@ -1,0 +1,7 @@
+@inject IAppVersionService VersionService
+
+<MudPaper Elevation="1" Class="d-flex align-center justify-space-between px-4 py-1" Style="position:fixed;bottom:0;left:0;right:0;z-index:1300;">
+    <MudText Typo="Typo.caption" Color="Color.Secondary">@VersionService.GetVersionInfo().Display</MudText>
+    <MudText Typo="Typo.caption" Color="Color.Secondary">© @DateTime.Now.Year Frank Boucher</MudText>
+    <MudLink Href="https://github.com/fboucher/my-gpx-activities" Target="_blank" Typo="Typo.caption" Color="Color.Secondary">GitHub</MudLink>
+</MudPaper>

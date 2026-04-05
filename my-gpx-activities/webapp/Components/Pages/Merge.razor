@@ -1,0 +1,210 @@
+@page "/merge"
+
+<PageTitle>Merge Activities</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                       Href="/activities"
+                       Variant="Variant.Text"
+                       Color="Color.Default"
+                       aria-label="Back to Activities" />
+        <MudText Typo="Typo.h4">Merge Activities</MudText>
+    </MudStack>
+
+    @if (isLoading)
+    {
+        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="py-8">
+            <MudProgressCircular Size="Size.Large" Indeterminate="true" />
+            <MudText Typo="Typo.body1" Class="mt-4">Loading merge preview...</MudText>
+        </MudStack>
+    }
+    else if (loadError != null)
+    {
+        <MudAlert Severity="Severity.Error">@loadError</MudAlert>
+        <MudButton Variant="Variant.Outlined" Href="/activities" StartIcon="@Icons.Material.Filled.ArrowBack">
+            Back to Activities
+        </MudButton>
+    }
+    else if (preview != null)
+    {
+        <MudGrid Spacing="3">
+            @* Summary panel — channels contributed by each activity *@
+            <MudItem xs="12">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Data Channels</MudText>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.subtitle2" Color="Color.Primary">Activity A</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">@preview.ActivityASportType</MudText>
+                            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                                @foreach (var ch in preview.ActivityAChannels)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@ch</MudChip>
+                                }
+                            </MudStack>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Activity B</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">@preview.ActivityBSportType</MudText>
+                            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                                @foreach (var ch in preview.ActivityBChannels)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">@ch</MudChip>
+                                }
+                            </MudStack>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+
+            @* Merge config form *@
+            <MudItem xs="12">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Merge Options</MudText>
+                    <MudStack Spacing="4">
+                        @* Mode selector *@
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.subtitle2">Mode</MudText>
+                            <MudRadioGroup @bind-Value="selectedMode">
+                                <MudRadio Value="@("merge")" Color="Color.Primary">
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.body2">Merge</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Combine overlapping data channels from both activities</MudText>
+                                    </MudStack>
+                                </MudRadio>
+                                <MudRadio Value="@("append")" Color="Color.Primary">
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.body2">Append</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Place Activity B after Activity A in sequence</MudText>
+                                    </MudStack>
+                                </MudRadio>
+                            </MudRadioGroup>
+                        </MudStack>
+
+                        @* Sport type *@
+                        <MudSelect @bind-Value="selectedSportType"
+                                   Label="Sport Type"
+                                   Variant="Variant.Outlined"
+                                   Style="max-width: 300px;">
+                            <MudSelectItem Value="@preview.ActivityASportType">@preview.ActivityASportType (Activity A)</MudSelectItem>
+                            @if (preview.ActivityBSportType != preview.ActivityASportType)
+                            {
+                                <MudSelectItem Value="@preview.ActivityBSportType">@preview.ActivityBSportType (Activity B)</MudSelectItem>
+                            }
+                        </MudSelect>
+
+                        @* Activity name *@
+                        <MudTextField @bind-Value="activityName"
+                                      Label="Activity Name"
+                                      Variant="Variant.Outlined"
+                                      Placeholder="Enter a name for the merged activity"
+                                      Style="max-width: 500px;" />
+
+                        @if (mergeError != null)
+                        {
+                            <MudAlert Severity="Severity.Error">@mergeError</MudAlert>
+                        }
+
+                        @* Actions *@
+                        <MudStack Row="true" Spacing="2">
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Secondary"
+                                       StartIcon="@Icons.Material.Filled.MergeType"
+                                       OnClick="ConfirmMerge"
+                                       Disabled="@isMerging">
+                                @if (isMerging)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <span>Merging...</span>
+                                }
+                                else
+                                {
+                                    <span>Confirm Merge</span>
+                                }
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Default"
+                                       Href="/activities"
+                                       Disabled="@isMerging">
+                                Cancel
+                            </MudButton>
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudStack>
+
+@inject webapp.Services.ActivityApiClient ActivityApiClient
+@inject NavigationManager NavigationManager
+
+@code {
+    [SupplyParameterFromQuery(Name = "a")]
+    public Guid ActivityAId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "b")]
+    public Guid ActivityBId { get; set; }
+
+    private ActivityApiClient.MergePreviewDto? preview;
+    private bool isLoading = true;
+    private string? loadError;
+    private bool isMerging;
+    private string? mergeError;
+
+    private string selectedMode = "merge";
+    private string selectedSportType = string.Empty;
+    private string activityName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (ActivityAId == Guid.Empty || ActivityBId == Guid.Empty)
+        {
+            loadError = "Invalid activity IDs. Please go back and select exactly 2 activities.";
+            isLoading = false;
+            return;
+        }
+
+        preview = await ActivityApiClient.GetMergePreviewAsync(ActivityAId, ActivityBId);
+        if (preview == null)
+        {
+            loadError = "Failed to load merge preview. The API may be unavailable or the activity IDs are invalid.";
+        }
+        else
+        {
+            selectedMode = preview.SuggestedMode.ToLowerInvariant();
+            selectedSportType = preview.ActivityASportType;
+            activityName = preview.SuggestedName;
+        }
+
+        isLoading = false;
+    }
+
+    private async Task ConfirmMerge()
+    {
+        if (preview == null) return;
+
+        isMerging = true;
+        mergeError = null;
+
+        var request = new ActivityApiClient.MergeRequest(
+            ActivityAId,
+            ActivityBId,
+            selectedMode,
+            selectedSportType,
+            activityName);
+
+        var newId = await ActivityApiClient.MergeActivitiesAsync(request);
+
+        if (newId.HasValue)
+        {
+            NavigationManager.NavigateTo($"/activities/{newId.Value}");
+        }
+        else
+        {
+            mergeError = "Merge failed. Please try again.";
+            isMerging = false;
+        }
+    }
+}

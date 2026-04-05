@@ -1,6 +1,8 @@
 using System.Text.Json;
 using my_gpx_activities.ApiService.Data;
 using my_gpx_activities.ApiService.Models;
+using my_gpx_activities.ApiService.Models.Merge;
+using my_gpx_activities.ApiService.Models.Strava;
 using my_gpx_activities.ApiService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,6 +22,8 @@ builder.Services.AddScoped<IActivityTypeRepository, ActivityTypeRepository>();
 builder.Services.AddScoped<IGpxParserService, GpxParserService>();
 builder.Services.AddScoped<IFitParserService, FitParserService>();
 builder.Services.AddScoped<ISmartMergeService, SmartMergeService>();
+builder.Services.AddScoped<IStravaImportService, StravaImportService>();
+builder.Services.AddScoped<IActivityMergeService, ActivityMergeService>();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -381,6 +385,33 @@ app.MapPost("/api/activities/smart-merge/import", async (HttpRequest request, IS
 .WithName("SmartMergeAndImportActivity")
 .WithDescription("Merge a GPX file with a FIT file to enrich heart-rate data, then save as a new activity");
 
+app.MapPost("/api/activities/import/strava", async (
+    StravaImportRequest request,
+    IStravaImportService stravaImportService,
+    Npgsql.NpgsqlDataSource dataSource) =>
+{
+    try
+    {
+        await using var conn = await dataSource.OpenConnectionAsync();
+        var result = await stravaImportService.ImportAsync(request.Activity, request.Streams, conn);
+
+        if (result.IsSuccess)
+        {
+            return Results.Ok(new { id = result.ActivityId });
+        }
+        else
+        {
+            return Results.Ok(new { duplicate = true, message = result.Message });
+        }
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error importing Strava activity: {ex.Message}");
+    }
+})
+.WithName("ImportStravaActivity")
+.WithDescription("Import a Strava activity from JSON envelope containing activity and optional streams data");
+
 app.MapGet("/api/activities", async (IActivityRepository repository) =>
 {
     var activities = await repository.GetAllActivitiesAsync();
@@ -514,6 +545,51 @@ app.MapGet("/api/activities/heatmap", async (
 })
 .WithName("GetHeatMapActivities")
 .WithDescription("Get GPS track points for all activities, optionally filtered by date range and sport types, for heat map rendering");
+
+app.MapGet("/api/activities/merge/preview", async (
+    Guid activityAId,
+    Guid activityBId,
+    IActivityMergeService mergeService) =>
+{
+    try
+    {
+        var preview = await mergeService.GetMergePreviewAsync(activityAId, activityBId);
+        return Results.Ok(preview);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(ex.Message);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error generating merge preview: {ex.Message}");
+    }
+})
+.WithName("GetMergePreview")
+.WithDescription("Returns a merge preview including suggested mode and detected channels for two activities");
+
+app.MapPost("/api/activities/merge", async (MergeRequest request, IActivityMergeService mergeService) =>
+{
+    try
+    {
+        var newId = await mergeService.MergeActivitiesAsync(request);
+        return Results.Created($"/api/activities/{newId}", new { id = newId });
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(ex.Message);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(ex.Message);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error merging activities: {ex.Message}");
+    }
+})
+.WithName("MergeActivities")
+.WithDescription("Merge two activities into a new standalone activity using append (concatenate) or merge (overlapping) mode");
 
 app.MapDefaultEndpoints();
 
