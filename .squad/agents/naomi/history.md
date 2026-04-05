@@ -165,3 +165,35 @@ CREATE TABLE IF NOT EXISTS import_errors (
 - No auth — endpoint called by external automation process
 - Returns 200 OK on both success and duplicate (error is logged but not thrown)
 
+
+### Activity Merge Feature (Issue #41)
+**New endpoints:**
+- `GET /api/activities/merge/preview?activityAId={guid}&activityBId={guid}` → `MergePreviewResponse`
+- `POST /api/activities/merge` with `MergeRequest` body → 201 with `{ id: newGuid }`
+
+**New models** (`Models/Merge/`):
+- `MergeRequest` record: `Guid ActivityAId, Guid ActivityBId, string Mode, string SportType, string Name`
+- `MergePreviewResponse` record: suggested mode, suggested name, channels detected per activity, sport types
+
+**New service** `Services/ActivityMergeService.cs`:
+- Registered as `IActivityMergeService` / `ActivityMergeService` (scoped)
+- `GetMergePreviewAsync`: fetches both activities in parallel, detects channels, checks time overlap for mode suggestion
+- `MergeActivitiesAsync`: append = chronological concat; merge = per-channel winner by non-null count; creates new Activity row via `IActivityRepository.CreateActivityAsync`
+
+**Channel schema** (track_data_json 6-element): `[lat(0), lon(1), elevation(2), hr(3), unix_ms(4), cadence(5)]`
+- GPS "gps": indices 0 and 1 treated as a unit
+- Channel detection: at least one non-null value in that index across all points
+- Channel count for merge winner: total non-null values at that index
+
+**Design decisions:**
+- Used `Guid` for activity IDs (spec said `int` but codebase uses `Guid` — corrected)
+- Merge mode: GPS spine from activity with more GPS points; other channels independently sourced; point alignment by array index (same-length assumption for overlapping activities)
+- Append mode: chronological by `StartDateTime`, stats summed (distance, elevation), avg speed averaged, max speed maximised
+- Stats for merged activity: computed from dominant/combined activities — no re-calculation from raw points
+- `file static class TaskExtensions` with `WhenBoth` extension for clean parallel Task awaiting
+
+**Key files:**
+- `Models/Merge/MergeRequest.cs`
+- `Models/Merge/MergePreviewResponse.cs`
+- `Services/ActivityMergeService.cs`
+- `Program.cs` — +1 using, +1 DI registration, +2 endpoints
