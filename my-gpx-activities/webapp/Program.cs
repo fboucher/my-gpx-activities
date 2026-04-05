@@ -30,6 +30,8 @@ builder.Services.AddHttpClient("ApiService", (serviceProvider, client) =>
 // Add MudBlazor services
 builder.Services.AddMudServices();
 
+builder.Services.AddSingleton<IAppVersionService, AppVersionService>();
+
 // Add activity store (in-memory for now, will be replaced with database)
 builder.Services.AddSingleton<ActivityStore>();
 builder.Services.AddTransient<HeatMapApiClient>();

@@ -109,3 +109,12 @@
 **Files changed:**
 - `my-gpx-activities/webapp/Components/Pages/ActivityDetail.razor` — updated LoadActivityAsync condition and method call
 - `my-gpx-activities/webapp/Services/ActivityStore.cs` — added AddOrUpdate method
+
+## Learnings
+
+### Issue #39 — Footer Version Service (webapp)
+- Created `AppVersionInfo` record, `IAppVersionService` interface, and `AppVersionService` implementation in `my-gpx-activities/webapp/Services/`.
+- `AppVersionService` reads `AssemblyInformationalVersionAttribute` from `GetEntryAssembly()`, splits on `+` to separate semver from build metadata, falls back to `"dev"` when no suffix is present.
+- When `GITHUB_RUN_ID` env var is set (CI/CD), it overrides `Build` with the first 10 characters.
+- Registered as `AddSingleton<IAppVersionService, AppVersionService>()` in `webapp/Program.cs`.
+- Alex (Frontend) consumes this service to render the footer via `IAppVersionService.GetVersionInfo().Display`.
