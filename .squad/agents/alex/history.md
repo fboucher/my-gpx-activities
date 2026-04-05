@@ -54,3 +54,13 @@
 - **Service injection**: Used `@inject IAppVersionService VersionService` — the service was already registered in `Program.cs` by Naomi as a singleton.
 - **Layout update**: Added `pb-16` to `MudMainContent` to prevent page content from being hidden behind the fixed footer; placed `<AppFooter />` just before the closing `</MudLayout>` tag.
 - **Typography**: Used `Typo.caption` + `Color.Secondary` for all three sections to keep the footer visually subtle and consistent with the app's dark palette.
+
+### Issue #41 — Merge selected activities
+- **Checkbox selection**: Added a narrow `TemplateColumn` with `MudCheckBox` as the first column in Activities.razor. Used a `HashSet<Guid> selectedIds` and a `ToggleSelection` helper. Disabling checkboxes when `selectedIds.Count >= 2` (and the item isn't already checked) enforces the "exactly 2" constraint without extra validation logic.
+- **Merge banner**: Used `MudAlert Severity="Severity.Info"` with an inline `MudStack Row` containing the "Merge Selected" and "Clear" buttons — this floats above the grid only when exactly 2 items are checked, keeping the UI uncluttered otherwise.
+- **Navigation**: `NavigationManager.NavigateTo($"/merge?a={ids[0]}&b={ids[1]}")` — order matches the order items were added to the HashSet (insertion order is preserved in .NET `HashSet<Guid>` via `LinkedHashSet`-like behavior in recent runtimes; this is fine for preview).
+- **Merge.razor query params**: Used `[SupplyParameterFromQuery(Name = "a")]` / `[SupplyParameterFromQuery(Name = "b")]` on `public Guid` properties — the standard Blazor way for typed query params (no `NavigationManager.GetUriWithQueryParameter` needed).
+- **MergePreviewDto**: Declared as a record inside `ActivityApiClient` alongside `MergeRequest` and `MergeResponse` to keep all API DTOs co-located with the client. Follows existing pattern of `ActivityTypeDto` as an inner record.
+- **Sport type dropdown**: When both activities have the same sport type, only one `MudSelectItem` is shown. Guard with `if (preview.ActivityBSportType != preview.ActivityASportType)` in the Razor template.
+- **MUD0002 warning**: `Title` is an illegal attribute on `MudIconButton` — use `aria-label` instead for accessibility tooltips on icon buttons.
+- **Merge page not in NavMenu**: The `/merge` route is a transient utility page, not a top-level destination. No nav entry added — consistent with how modal/workflow pages are handled in this app.

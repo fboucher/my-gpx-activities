@@ -118,3 +118,50 @@
 - When `GITHUB_RUN_ID` env var is set (CI/CD), it overrides `Build` with the first 10 characters.
 - Registered as `AddSingleton<IAppVersionService, AppVersionService>()` in `webapp/Program.cs`.
 - Alex (Frontend) consumes this service to render the footer via `IAppVersionService.GetVersionInfo().Display`.
+
+### Issue #40 — Strava JSON Import (PR #TBD)
+**Endpoint:** `POST /api/activities/import/strava` — accepts JSON envelope `{ "activity": {...}, "streams": {...} }` (streams optional)
+
+**Data source strategies:**
+1. **Streams present:** Build track_data_json from parallel arrays — latlng + altitude + heartrate + cadence + time
+   - `latlng`: array of `[lat, lon]` pairs
+   - `altitude`, `heartrate`, `cadence`: parallel numeric arrays (may be absent)
+   - `time`: seconds offset from start_date → convert to unix ms: `(start_date + TimeSpan.FromSeconds(offset)).ToUnixTimeMilliseconds()`
+   - All streams keyed by type (`key_by_type=true`) — e.g., `streams["latlng"]["data"]`
+2. **Streams absent:** Decode `activity.map.polyline` (Google Encoded Polyline) — lat/lon only, null for elevation/HR/cadence
+   - Polyline algorithm: 5-bit chunks, sign-extended, accumulated delta encoding
+   - Returns list of (lat, lon) tuples divided by 1e5
+
+**Track data schema:** Same 6-element format as GPX/FIT: `[lat, lon, elevation_or_null, hr_or_null, unix_ms_or_null, cadence_or_null]`
+
+**Sport type mapping:** Dictionary-based (`NordicSki` → `Nordic Ski`, `Ride` → `Cycling`, etc.) with regex fallback for unmapped types (PascalCase → space-separated)
+
+**Duplicate handling:**
+- Check by `title + start_date_time` (no Strava-specific ID column in activities table)
+- On duplicate: insert to `import_errors` table (source, external_id, message, created_at), return `ImportResult.Duplicate(message)` — don't crash
+- Client receives `{ duplicate: true, message: "..." }` instead of 500 error
+
+**New table — import_errors:**
+```sql
+CREATE TABLE IF NOT EXISTS import_errors (
+    id SERIAL PRIMARY KEY,
+    source TEXT NOT NULL,
+    external_id TEXT,
+    message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+**Key files:**
+- `Models/Strava/StravaImportRequest.cs` — request envelope (JsonElement properties for flexibility)
+- `Models/Strava/ImportResult.cs` — typed result with Success/Duplicate factory methods
+- `Services/StravaImportService.cs` — parser + polyline decoder (~300 lines)
+- `Data/DatabaseInitializer.cs` — added import_errors table creation
+- `Program.cs` — service registration + endpoint
+
+**Design notes:**
+- Used `JsonElement` (not full Strava SDK model) — allows parsing any Strava field without tight coupling
+- Polyline decoder implemented inline (~20 lines) — no NuGet dependency
+- No auth — endpoint called by external automation process
+- Returns 200 OK on both success and duplicate (error is logged but not thrown)
+
