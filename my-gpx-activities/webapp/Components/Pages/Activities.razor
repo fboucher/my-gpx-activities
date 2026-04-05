@@ -58,6 +58,28 @@ else
         </MudPaper>
     </MudStack>
 
+    @if (selectedIds.Count == 2)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.MergeType">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                <MudText Typo="Typo.body2">2 activities selected — ready to merge</MudText>
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Secondary"
+                          Size="Size.Small"
+                          StartIcon="@Icons.Material.Filled.MergeType"
+                          OnClick="NavigateToMerge">
+                    Merge Selected
+                </MudButton>
+                <MudButton Variant="Variant.Text"
+                          Color="Color.Default"
+                          Size="Size.Small"
+                          OnClick="@(() => selectedIds.Clear())">
+                    Clear
+                </MudButton>
+            </MudStack>
+        </MudAlert>
+    }
+
     <MudDataGrid T="ActivitySummary"
                 Items="FilteredActivities"
                 SortMode="SortMode.Multiple"
@@ -68,6 +90,19 @@ else
                 Hover="true"
                 Class="mb-4">
         <Columns>
+            <TemplateColumn Title="" CellStyle="width:40px">
+                <CellTemplate>
+                    @{
+                        var itemId = context.Item.Id;
+                        var isChecked = selectedIds.Contains(itemId);
+                    }
+                    <MudCheckBox Value="@isChecked"
+                                ValueChanged="@((bool v) => ToggleSelection(itemId, v))"
+                                Disabled="@(!isChecked && selectedIds.Count >= 2)"
+                                Size="Size.Small" />
+                </CellTemplate>
+            </TemplateColumn>
+
             <TemplateColumn Title="Actions">
                 <CellTemplate>
                     <MudButton Variant="Variant.Text"
@@ -142,11 +177,27 @@ else
 
 @inject webapp.Services.ActivityStore ActivityStore
 @inject webapp.Services.ActivityApiClient ActivityApiClient
+@inject NavigationManager NavigationManager
 
 @code {
     private List<webapp.Services.ActivitySummary>? activities;
     private string searchText = string.Empty;
     private string selectedActivityType = string.Empty;
+    private readonly HashSet<Guid> selectedIds = new();
+
+    private void ToggleSelection(Guid id, bool selected)
+    {
+        if (selected)
+            selectedIds.Add(id);
+        else
+            selectedIds.Remove(id);
+    }
+
+    private void NavigateToMerge()
+    {
+        var ids = selectedIds.ToArray();
+        NavigationManager.NavigateTo($"/merge?a={ids[0]}&b={ids[1]}");
+    }
 
     private IEnumerable<webapp.Services.ActivitySummary> FilteredActivities
     {
