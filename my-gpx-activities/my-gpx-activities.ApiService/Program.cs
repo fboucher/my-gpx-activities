@@ -1,6 +1,7 @@
 using System.Text.Json;
 using my_gpx_activities.ApiService.Data;
 using my_gpx_activities.ApiService.Models;
+using my_gpx_activities.ApiService.Models.Strava;
 using my_gpx_activities.ApiService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,6 +21,7 @@ builder.Services.AddScoped<IActivityTypeRepository, ActivityTypeRepository>();
 builder.Services.AddScoped<IGpxParserService, GpxParserService>();
 builder.Services.AddScoped<IFitParserService, FitParserService>();
 builder.Services.AddScoped<ISmartMergeService, SmartMergeService>();
+builder.Services.AddScoped<IStravaImportService, StravaImportService>();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -380,6 +382,33 @@ app.MapPost("/api/activities/smart-merge/import", async (HttpRequest request, IS
 })
 .WithName("SmartMergeAndImportActivity")
 .WithDescription("Merge a GPX file with a FIT file to enrich heart-rate data, then save as a new activity");
+
+app.MapPost("/api/activities/import/strava", async (
+    StravaImportRequest request,
+    IStravaImportService stravaImportService,
+    Npgsql.NpgsqlDataSource dataSource) =>
+{
+    try
+    {
+        await using var conn = await dataSource.OpenConnectionAsync();
+        var result = await stravaImportService.ImportAsync(request.Activity, request.Streams, conn);
+
+        if (result.IsSuccess)
+        {
+            return Results.Ok(new { id = result.ActivityId });
+        }
+        else
+        {
+            return Results.Ok(new { duplicate = true, message = result.Message });
+        }
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error importing Strava activity: {ex.Message}");
+    }
+})
+.WithName("ImportStravaActivity")
+.WithDescription("Import a Strava activity from JSON envelope containing activity and optional streams data");
 
 app.MapGet("/api/activities", async (IActivityRepository repository) =>
 {

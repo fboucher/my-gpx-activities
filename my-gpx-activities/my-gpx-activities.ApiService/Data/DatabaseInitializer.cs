@@ -75,6 +75,17 @@ public class DatabaseInitializer : IDatabaseInitializer
                     CREATE INDEX IF NOT EXISTS idx_activities_activity_type ON activities(activity_type);
                     """);
 
+                // Create import_errors table
+                await connection.ExecuteAsync("""
+                    CREATE TABLE IF NOT EXISTS import_errors (
+                        id SERIAL PRIMARY KEY,
+                        source TEXT NOT NULL,
+                        external_id TEXT,
+                        message TEXT,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    );
+                    """);
+
                 // Seed default activity types if none exist
                 var activityTypeCount = await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM activity_types");
                 if (activityTypeCount == 0)
