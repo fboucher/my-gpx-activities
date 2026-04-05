@@ -48,3 +48,9 @@
 - **Row hover highlight**: Added `Hover="true"` to `MudDataGrid` — MudBlazor's built-in hover styling provides visual feedback when mousing over rows.
 - **Filter UI design**: Wrapped filters in `MudPaper` with elevation for visual separation. Used `MudTextField` with search icon and debounce (300ms) to avoid excessive re-filtering on every keystroke.
 - **Counter update**: Footer now shows `X of Y activities` when filters are active, indicating how many match out of total.
+
+### Issue #39 — Add a footer
+- **Footer component**: Created `AppFooter.razor` using `MudPaper` with `position:fixed;bottom:0` inline style rather than `MudAppBar Bottom="true"` — `MudAppBar` does not support a `Bottom` prop in this MudBlazor version; `MudPaper` with fixed positioning achieves the same visual result.
+- **Service injection**: Used `@inject IAppVersionService VersionService` — the service was already registered in `Program.cs` by Naomi as a singleton.
+- **Layout update**: Added `pb-16` to `MudMainContent` to prevent page content from being hidden behind the fixed footer; placed `<AppFooter />` just before the closing `</MudLayout>` tag.
+- **Typography**: Used `Typo.caption` + `Color.Secondary` for all three sections to keep the footer visually subtle and consistent with the app's dark palette.
