@@ -203,7 +203,8 @@ else
                         <MudButton Variant="Variant.Outlined"
                                   Color="Color.Error"
                                   StartIcon="@Icons.Material.Filled.Delete"
-                                  FullWidth="true">
+                                  FullWidth="true"
+                                  OnClick="HandleDeleteAsync">
                             Delete Activity
                         </MudButton>
                     </MudStack>
@@ -232,6 +233,7 @@ else
 @inject webapp.Services.ActivityApiClient ActivityApiClient
 @inject IJSRuntime JSRuntime
 @inject MudBlazor.IDialogService DialogService
+@inject NavigationManager Navigation
 
 @code {
     [Parameter]
@@ -267,6 +269,30 @@ else
                 activity.ActivityType = updated.ActivityType;
                 StateHasChanged();
             }
+        }
+    }
+
+    private async Task HandleDeleteAsync()
+    {
+        if (activity == null) return;
+
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Activity",
+            $"Are you sure you want to delete \"{activity.Title}\"? This cannot be undone.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed != true) return;
+
+        var deleted = await ActivityApiClient.DeleteActivityAsync(activity.Id);
+        if (deleted)
+        {
+            ActivityStore.Remove(activity.Id);
+            Navigation.NavigateTo("/activities");
+        }
+        else
+        {
+            errorMessage = "Failed to delete the activity. Please try again.";
+            StateHasChanged();
         }
     }
 

@@ -38,6 +38,13 @@ public class ActivityStore
         }
     }
 
+    public void Remove(Guid id)
+    {
+        var activity = GetById(id);
+        if (activity != null)
+            _activities.Remove(activity);
+    }
+
     public void Clear()
     {
         _activities.Clear();

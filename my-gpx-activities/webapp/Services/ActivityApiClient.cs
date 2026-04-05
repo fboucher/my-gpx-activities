@@ -76,4 +76,10 @@ public class ActivityApiClient(IHttpClientFactory httpClientFactory)
         var result = await response.Content.ReadFromJsonAsync<MergeResponse>(cancellationToken);
         return result?.Id;
     }
+
+    public async Task<bool> DeleteActivityAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var response = await _client.DeleteAsync($"/api/activities/{id}", cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
 }
