@@ -67,4 +67,7 @@ public class ActivitySummary
     public DateTime CreatedAt { get; set; }
     public List<double[]>? TrackCoordinates { get; set; }
     public List<double?[]>? TrackData { get; set; }
+    public double? AverageHeartRate { get; set; }
+    public double? MaxHeartRate { get; set; }
+    public double? Calories { get; set; }
 }
