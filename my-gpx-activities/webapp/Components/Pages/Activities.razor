@@ -234,14 +234,29 @@ else
 
     private async Task LoadActivitiesAsync()
     {
-        // Seed store from API if empty (e.g. after restart)
-        if (!ActivityStore.Activities.Any())
+        var apiActivities = await ActivityApiClient.GetAllActivitiesAsync();
+        
+        // Merge API results into store: preserve cached TrackData for unchanged activities
+        foreach (var a in apiActivities)
         {
-            var apiActivities = await ActivityApiClient.GetAllActivitiesAsync();
-            foreach (var a in apiActivities)
-                ActivityStore.Add(a);
+            var cached = ActivityStore.GetById(a.Id);
+            if (cached?.TrackData != null)
+            {
+                a.TrackData = cached.TrackData;
+                a.TrackCoordinates = cached.TrackCoordinates;
+            }
+            ActivityStore.AddOrUpdate(a);
         }
-        activities = ActivityStore.Activities.ToList();
+        
+        // Remove from store any activities no longer in the DB
+        var apiIds = apiActivities.Select(a => a.Id).ToHashSet();
+        foreach (var storeActivity in ActivityStore.Activities.ToList())
+        {
+            if (!apiIds.Contains(storeActivity.Id))
+                ActivityStore.Remove(storeActivity.Id);
+        }
+        
+        activities = ActivityStore.Activities.OrderByDescending(a => a.StartDateTime).ToList();
     }
 
     private IEnumerable<string> GetActivityTypes()
