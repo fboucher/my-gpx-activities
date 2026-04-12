@@ -366,4 +366,301 @@ public class StravaImportTests
                 "Activity ID should be a number");
         }
     }
+
+    /// <summary>
+    /// Tests importing an indoor trainer activity with heart rate data but no GPS (no latlng stream).
+    /// Verifies that heart rate data is preserved in trackData.
+    /// Issue #51: Handle activities with no GPS data.
+    /// </summary>
+    [Test]
+    public async Task ImportTrainerActivityWithHeartRate_ReturnsOkAndPreservesHeartRate()
+    {
+        var cancellationToken = TestContext.CurrentContext.CancellationToken;
+
+        var request = new
+        {
+            activity = new
+            {
+                id = 18068872357L, // Indoor trainer Ride (watch data)
+                name = "Lunch Ride",
+                sport_type = "Ride",
+                start_date = "2026-04-11T15:26:05Z",
+                elapsed_time = 3007,
+                distance = 0.0,
+                total_elevation_gain = 0,
+                average_speed = 0.0,
+                max_speed = 0.0,
+                trainer = true,
+                has_heartrate = true,
+                average_heartrate = 118.3,
+                map = new
+                {
+                    polyline = ""
+                }
+            },
+            streams = new
+            {
+                heartrate = new { data = new[] { 88, 90, 92, 95 } },
+                altitude = new { data = new[] { 5.2, 5.2, 5.2, 5.2 } },
+                time = new { data = new[] { 0, 1, 2, 3 } }
+                // No latlng stream - this is an indoor activity
+            }
+        };
+
+        var response = await _httpClient!.PostAsJsonAsync("/api/activities/import/strava", request, cancellationToken);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK),
+            "Import trainer activity with heart rate should return 200 OK");
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var doc = JsonDocument.Parse(json);
+
+        // Should get a new ID (not a duplicate)
+        var hasId = doc.RootElement.TryGetProperty("id", out var idElement);
+        Assert.That(hasId, Is.True,
+            "Response should contain an 'id' property");
+
+        var activityId = idElement.GetInt32();
+
+        // Now GET the activity to verify trackData contains heart rate
+        var getResponse = await _httpClient!.GetAsync($"/api/activities/{activityId}", cancellationToken);
+        Assert.That(getResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK),
+            "GET activity should succeed");
+
+        var activityJson = await getResponse.Content.ReadAsStringAsync(cancellationToken);
+        using var activityDoc = JsonDocument.Parse(activityJson);
+
+        // Verify trackData exists and is not null
+        var hasTrackData = activityDoc.RootElement.TryGetProperty("trackData", out var trackDataElement) ||
+                          activityDoc.RootElement.TryGetProperty("TrackData", out trackDataElement);
+        Assert.That(hasTrackData, Is.True,
+            "Activity should have trackData property");
+
+        Assert.That(trackDataElement.ValueKind, Is.Not.EqualTo(JsonValueKind.Null),
+            "trackData should not be null");
+
+        // Parse trackData JSON string
+        var trackDataJson = trackDataElement.GetString();
+        Assert.That(trackDataJson, Is.Not.Null.And.Not.Empty,
+            "trackData JSON should not be empty");
+
+        using var trackDataDoc = JsonDocument.Parse(trackDataJson!);
+        Assert.That(trackDataDoc.RootElement.ValueKind, Is.EqualTo(JsonValueKind.Array),
+            "trackData should be an array");
+
+        var trackPoints = trackDataDoc.RootElement;
+        Assert.That(trackPoints.GetArrayLength(), Is.GreaterThan(0),
+            "trackData should contain track points");
+
+        // Verify that at least one point has heart rate data (index 3)
+        // Track point format: [lat, lon, elevation, heartrate, unixMs, cadence]
+        var hasHeartRate = false;
+        foreach (var point in trackPoints.EnumerateArray())
+        {
+            if (point.GetArrayLength() > 3 && point[3].ValueKind == JsonValueKind.Number)
+            {
+                hasHeartRate = true;
+                break;
+            }
+        }
+
+        Assert.That(hasHeartRate, Is.True,
+            "At least one track point should have heart rate data");
+    }
+
+    /// <summary>
+    /// Tests that an indoor trainer activity with no GPS has null or empty trackCoordinates.
+    /// Issue #51: Track coordinates should not be generated for activities without GPS data.
+    /// </summary>
+    [Test]
+    public async Task ImportTrainerActivityWithHeartRate_TrackCoordinatesJsonIsEmptyOrNull()
+    {
+        var cancellationToken = TestContext.CurrentContext.CancellationToken;
+
+        var request = new
+        {
+            activity = new
+            {
+                id = 18068872358L, // Similar to above but unique ID
+                name = "Indoor Ride No GPS",
+                sport_type = "Ride",
+                start_date = "2026-04-11T16:00:00Z",
+                elapsed_time = 1800,
+                distance = 0.0,
+                total_elevation_gain = 0,
+                average_speed = 0.0,
+                max_speed = 0.0,
+                trainer = true,
+                has_heartrate = true,
+                average_heartrate = 120.0,
+                map = new
+                {
+                    polyline = ""
+                }
+            },
+            streams = new
+            {
+                heartrate = new { data = new[] { 100, 105, 110, 115 } },
+                altitude = new { data = new[] { 10.0, 10.0, 10.0, 10.0 } },
+                time = new { data = new[] { 0, 10, 20, 30 } }
+                // No latlng stream
+            }
+        };
+
+        var response = await _httpClient!.PostAsJsonAsync("/api/activities/import/strava", request, cancellationToken);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var doc = JsonDocument.Parse(json);
+        var hasId = doc.RootElement.TryGetProperty("id", out var idElement);
+        Assert.That(hasId, Is.True);
+
+        var activityId = idElement.GetInt32();
+
+        // GET the activity and verify trackCoordinates
+        var getResponse = await _httpClient!.GetAsync($"/api/activities/{activityId}", cancellationToken);
+        Assert.That(getResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var activityJson = await getResponse.Content.ReadAsStringAsync(cancellationToken);
+        using var activityDoc = JsonDocument.Parse(activityJson);
+
+        // Check trackCoordinates - should be null or empty
+        var hasTrackCoordinates = activityDoc.RootElement.TryGetProperty("trackCoordinates", out var trackCoordsElement) ||
+                                 activityDoc.RootElement.TryGetProperty("TrackCoordinates", out trackCoordsElement);
+
+        if (hasTrackCoordinates)
+        {
+            // If property exists, it should be null or an empty array
+            var isNullOrEmpty = trackCoordsElement.ValueKind == JsonValueKind.Null ||
+                               (trackCoordsElement.ValueKind == JsonValueKind.String && 
+                                (string.IsNullOrEmpty(trackCoordsElement.GetString()) || 
+                                 trackCoordsElement.GetString() == "[]"));
+
+            Assert.That(isNullOrEmpty, Is.True,
+                "trackCoordinates should be null or empty for activities without GPS");
+        }
+
+        // Verify trackData still exists and has heart rate
+        var hasTrackData = activityDoc.RootElement.TryGetProperty("trackData", out var trackDataElement) ||
+                          activityDoc.RootElement.TryGetProperty("TrackData", out trackDataElement);
+        Assert.That(hasTrackData, Is.True,
+            "Activity should have trackData even without GPS");
+
+        Assert.That(trackDataElement.ValueKind, Is.Not.EqualTo(JsonValueKind.Null),
+            "trackData should not be null");
+    }
+
+    /// <summary>
+    /// Tests importing a Rouvy VirtualRide activity with GPS (latlng stream) and power data.
+    /// Verifies that GPS coordinates are preserved in trackCoordinates and trackData.
+    /// Issue #51: Ensure GPS activities still work correctly.
+    /// </summary>
+    [Test]
+    public async Task ImportRouvyActivityWithGps_ReturnsOkWithTrackPoints()
+    {
+        var cancellationToken = TestContext.CurrentContext.CancellationToken;
+
+        var request = new
+        {
+            activity = new
+            {
+                id = 18068853828L, // Rouvy VirtualRide with GPS
+                name = "ROUVY - Iron Tempo",
+                sport_type = "VirtualRide",
+                start_date = "2026-04-11T15:26:02Z",
+                elapsed_time = 2999,
+                distance = 11165.0,
+                total_elevation_gain = 243.0,
+                average_speed = 3.723,
+                max_speed = 8.86,
+                trainer = false,
+                map = new
+                {
+                    polyline = "cmsqFhyiaSTpFX`DPnAn@~C~@jCn@xAlA`Cd@hAdApDdAxCfAzBv@xBpAvGv@|Aj@n@xA`AvAZzAAjDi@lBGbKFnGtCtEfC`AhA\\bA@hAc@xHHnAP~@`@fAf@x@pCbEtDrEbBvAtDjCp@h@z@tAVhBAxAWjBuAxHUrBG`DVpG?dAMpB[~B]pBy@rCaBxA{@L}@CqGgAwABq@Zk@n@s@`CQrAoAzFEhBVhAv@tAdC|Ch@z@b@`A`@nB\\dERbBb@jBdAfBpB|C`@jCCjB]~B}DpPo@lDS~C@dEMlAcAvBuAdB_ApAmAdC[|@WfAWnBBfCXjBp@dBdArA~AdBt@bAh@vARhAGnAS`Ao@tA}BrEiAdC_@fBKzANhIChAOfAY|@mC~D_AfAq@b@{@`@oAb@oAv@g@r@CFq@jCm@xEGtEKlBc@dDIlA@`A\\|Bj@xAl@|@h@b@j@XpATpAE`ASnG}BzAg@nAIF?lAXbA~@n@fBb@bBd@tA|@pAHHdAh@jBp@rA`@z@FtAUt@Qt@En@J~AfAx@bClAfJfAnHTdBF`BOdBi@~AwDvHqKlScAdBw@bBi@xAq@`C_@zBk@`H_BjX?lCl@jIPpCPfG"
+                }
+            },
+            streams = new
+            {
+                latlng = new { data = new[] { new[] { 45.5234, -73.5678 }, new[] { 45.5235, -73.5679 }, new[] { 45.5236, -73.5680 } } },
+                altitude = new { data = new[] { 1758.2, 1758.4, 1758.6 } },
+                watts = new { data = new[] { 100, 105, 110 } },
+                cadence = new { data = new[] { 85, 86, 87 } },
+                time = new { data = new[] { 0, 1, 2 } }
+                // No heartrate stream for this activity
+            }
+        };
+
+        var response = await _httpClient!.PostAsJsonAsync("/api/activities/import/strava", request, cancellationToken);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK),
+            "Import Rouvy activity with GPS should return 200 OK");
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var doc = JsonDocument.Parse(json);
+
+        var hasId = doc.RootElement.TryGetProperty("id", out var idElement);
+        Assert.That(hasId, Is.True,
+            "Response should contain an 'id' property");
+
+        var activityId = idElement.GetInt32();
+
+        // GET the activity to verify GPS data
+        var getResponse = await _httpClient!.GetAsync($"/api/activities/{activityId}", cancellationToken);
+        Assert.That(getResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK),
+            "GET activity should succeed");
+
+        var activityJson = await getResponse.Content.ReadAsStringAsync(cancellationToken);
+        using var activityDoc = JsonDocument.Parse(activityJson);
+
+        // Verify trackCoordinates exists and has GPS points
+        var hasTrackCoordinates = activityDoc.RootElement.TryGetProperty("trackCoordinates", out var trackCoordsElement) ||
+                                 activityDoc.RootElement.TryGetProperty("TrackCoordinates", out trackCoordsElement);
+        Assert.That(hasTrackCoordinates, Is.True,
+            "Activity should have trackCoordinates property");
+
+        Assert.That(trackCoordsElement.ValueKind, Is.Not.EqualTo(JsonValueKind.Null),
+            "trackCoordinates should not be null for GPS activities");
+
+        // Parse trackCoordinates JSON string
+        var trackCoordsJson = trackCoordsElement.GetString();
+        Assert.That(trackCoordsJson, Is.Not.Null.And.Not.Empty,
+            "trackCoordinates JSON should not be empty");
+
+        using var trackCoordsDoc = JsonDocument.Parse(trackCoordsJson!);
+        Assert.That(trackCoordsDoc.RootElement.ValueKind, Is.EqualTo(JsonValueKind.Array),
+            "trackCoordinates should be an array");
+
+        var coordinates = trackCoordsDoc.RootElement;
+        Assert.That(coordinates.GetArrayLength(), Is.GreaterThan(0),
+            "trackCoordinates should contain GPS points");
+
+        // Verify trackData exists and has GPS coordinates
+        var hasTrackData = activityDoc.RootElement.TryGetProperty("trackData", out var trackDataElement) ||
+                          activityDoc.RootElement.TryGetProperty("TrackData", out trackDataElement);
+        Assert.That(hasTrackData, Is.True,
+            "Activity should have trackData property");
+
+        Assert.That(trackDataElement.ValueKind, Is.Not.EqualTo(JsonValueKind.Null),
+            "trackData should not be null");
+
+        // Parse trackData and verify at least one point has non-null lat/lon (indices 0, 1)
+        var trackDataJson = trackDataElement.GetString();
+        using var trackDataDoc = JsonDocument.Parse(trackDataJson!);
+        var trackPoints = trackDataDoc.RootElement;
+
+        var hasGpsPoint = false;
+        foreach (var point in trackPoints.EnumerateArray())
+        {
+            if (point.GetArrayLength() > 1 && 
+                point[0].ValueKind == JsonValueKind.Number && 
+                point[1].ValueKind == JsonValueKind.Number)
+            {
+                hasGpsPoint = true;
+                break;
+            }
+        }
+
+        Assert.That(hasGpsPoint, Is.True,
+            "At least one track point should have GPS coordinates (lat, lon)");
+    }
 }
