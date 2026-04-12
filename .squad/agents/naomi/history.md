@@ -220,3 +220,31 @@ CREATE TABLE IF NOT EXISTS import_errors (
 - `my-gpx-activities.ApiService/Services/StravaImportService.cs`: `BuildTrackDataFromStreams` refactored to handle optional latlng; track_coordinates_json generation filtered to non-null GPS
 
 **Branch:** `fix/issue-51-strava-import-no-gps` — pushed, awaiting test integration from Amos before PR creation
+
+
+### Issue #48 — Exception Logging (API)
+**Problem:** API endpoints returned `ex.Message` directly in ProblemDetails responses, leaking internal error details (stack traces, connection strings, etc.) to API consumers. This is a security vulnerability and poor UX practice.
+
+**Solution:** Log exceptions server-side using `app.Logger` and return generic, user-friendly error messages to clients.
+
+**Changes applied:**
+- **13 exception handlers** across Program.cs now log via ILogger before returning responses
+- Log levels: `LogError` for unexpected exceptions, `LogWarning` for validation/not-found cases
+- Generic messages: "An error occurred while..." for 500 errors, specific guidance for 400 errors
+- No breaking changes — HTTP status codes and response structure unchanged
+
+**Endpoints fixed:**
+- POST /api/activities/import (GPX import)
+- POST /api/activities/import/batch (batch import — both inner and outer catch)
+- POST /api/activities/smart-merge (GPX+FIT merge)
+- POST /api/activities/smart-merge/import (merge + import)
+- POST /api/activities/import/strava (Strava JSON import)
+- GET /api/activities/merge/preview (merge preview)
+- POST /api/activities/merge (execute merge)
+
+**Key insight:** `app.Logger` is available in minimal API endpoints via the `WebApplication` instance — no need to inject `ILogger<Program>` into each handler.
+
+**Branch:** squad/48-exception-logging  
+**PR:** #60  
+**Files changed:** my-gpx-activities.ApiService/Program.cs
+
