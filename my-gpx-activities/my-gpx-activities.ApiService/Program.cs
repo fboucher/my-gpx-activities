@@ -430,7 +430,7 @@ app.MapGet("/api/activities", async (IActivityRepository repository) =>
         a.MaxSpeedMs,
         TrackPoints = a.TrackPointCount,
         a.CreatedAt
-    });
+    }).ToList();
 
     return Results.Ok(response);
 })
