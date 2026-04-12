@@ -13,18 +13,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Compute beta version
-        id: version
-        run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          VERSION="${LATEST_TAG#v}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          NEW_PATCH=$((PATCH + 1))
-          BETA_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}-beta"
-          echo "beta_version=${BETA_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -41,7 +29,7 @@ jobs:
           context: ./my-gpx-activities
           file: ./my-gpx-activities/my-gpx-activities.ApiService/Dockerfile
           push: true
-          tags: fboucher/my-gpx-activities-api:${{ steps.version.outputs.beta_version }}
+          tags: fboucher/my-gpx-activities-api:beta
 
       - name: Build and push webapp beta image
         uses: docker/build-push-action@v6
@@ -49,4 +37,4 @@ jobs:
           context: ./my-gpx-activities
           file: ./my-gpx-activities/webapp/Dockerfile
           push: true
-          tags: fboucher/my-gpx-activities-webapp:${{ steps.version.outputs.beta_version }}
+          tags: fboucher/my-gpx-activities-webapp:beta
