@@ -72,8 +72,11 @@ public class StravaImportService : IStravaImportService
             // Build track data
             var trackData = await BuildTrackDataAsync(activity, streams, startDate);
 
-            // Build track coordinates (simplified lat/lon only)
-            var trackCoordinates = trackData.Select(tp => new[] { tp[0], tp[1] }).ToList();
+            // Build track coordinates (simplified lat/lon only, exclude null GPS points)
+            var trackCoordinates = trackData
+                .Where(tp => tp[0].HasValue && tp[1].HasValue)
+                .Select(tp => new[] { tp[0]!.Value, tp[1]!.Value })
+                .ToList();
 
             // Create activity
             var activityId = Guid.NewGuid();
@@ -139,32 +142,51 @@ public class StravaImportService : IStravaImportService
 
     private List<double?[]> BuildTrackDataFromStreams(JsonElement streams, DateTime startDate)
     {
-        // Extract latlng stream
-        if (!streams.TryGetProperty("latlng", out var latlngStream) ||
-            !latlngStream.TryGetProperty("data", out var latlngData))
-        {
-            return new List<double?[]>();
-        }
-
-        var latlngArray = latlngData.EnumerateArray().ToList();
-        var count = latlngArray.Count;
-
-        // Extract other streams (optional)
+        // Extract streams (latlng is optional for indoor/trainer activities)
         var altitudeData = TryGetStreamData(streams, "altitude");
         var heartrateData = TryGetStreamData(streams, "heartrate");
         var cadenceData = TryGetStreamData(streams, "cadence");
         var timeData = TryGetStreamData(streams, "time");
 
+        // Try to get latlng stream
+        List<JsonElement>? latlngArray = null;
+        if (streams.TryGetProperty("latlng", out var latlngStream) &&
+            latlngStream.TryGetProperty("data", out var latlngData))
+        {
+            latlngArray = latlngData.EnumerateArray().ToList();
+        }
+
+        // Determine count from any available stream
+        int count = latlngArray?.Count ?? 
+                    timeData?.Count ?? 
+                    altitudeData?.Count ?? 
+                    heartrateData?.Count ?? 
+                    cadenceData?.Count ?? 
+                    0;
+
+        if (count == 0)
+        {
+            return new List<double?[]>();
+        }
+
         var trackData = new List<double?[]>();
 
         for (int i = 0; i < count; i++)
         {
-            var latlng = latlngArray[i];
-            if (latlng.GetArrayLength() < 2)
-                continue;
+            double? lat = null;
+            double? lon = null;
 
-            var lat = latlng[0].GetDouble();
-            var lon = latlng[1].GetDouble();
+            // Extract GPS coordinates if available
+            if (latlngArray != null && i < latlngArray.Count)
+            {
+                var latlng = latlngArray[i];
+                if (latlng.GetArrayLength() >= 2)
+                {
+                    lat = latlng[0].GetDouble();
+                    lon = latlng[1].GetDouble();
+                }
+            }
+
             var elevation = altitudeData != null && i < altitudeData.Count ? (double?)altitudeData[i].GetDouble() : null;
             var heartrate = heartrateData != null && i < heartrateData.Count ? (double?)heartrateData[i].GetInt32() : null;
             var cadence = cadenceData != null && i < cadenceData.Count ? (double?)cadenceData[i].GetInt32() : null;
