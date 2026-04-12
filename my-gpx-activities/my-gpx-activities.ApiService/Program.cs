@@ -530,6 +530,14 @@ app.MapGet("/api/statistics/by-sport", async (IActivityRepository repository) =>
 .WithName("GetStatisticsBySport")
 .WithDescription("Get aggregated statistics grouped by sport type");
 
+app.MapGet("/api/statistics/global", async (IActivityRepository repository) =>
+{
+    var statistics = await repository.GetGlobalStatisticsAsync();
+    return Results.Ok(statistics);
+})
+.WithName("GetGlobalStatistics")
+.WithDescription("Get global statistics including streaks, activity days, year recap, and sport breakdown");
+
 app.MapGet("/api/activities/heatmap", async (
     IActivityRepository repository,
     DateOnly? dateFrom,

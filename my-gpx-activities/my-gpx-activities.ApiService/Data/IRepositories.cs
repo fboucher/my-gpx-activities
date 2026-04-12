@@ -12,6 +12,7 @@ public interface IActivityRepository
     Task<bool> DeleteActivityAsync(Guid id);
     Task<IEnumerable<SportStatistics>> GetStatisticsBySportAsync();
     Task<IEnumerable<HeatMapActivity>> GetActivitiesForHeatMapAsync(DateOnly? from, DateOnly? to, string[]? sportTypes);
+    Task<GlobalStatistics> GetGlobalStatisticsAsync();
 }
 
 public interface IActivityTypeRepository
