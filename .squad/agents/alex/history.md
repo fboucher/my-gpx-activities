@@ -82,6 +82,16 @@
 - **"No data" fallback**: Added `MudAlert Severity.Info` shown when neither GPS nor HR data exists, preventing truly blank pages.
 - **Result**: No-GPS activities (yoga, indoor training) now display meaningful HR charts, stats, and calorie information. Built and pushed to branch `squad/55-final`, PR #62 created.
 
+### Issue #4 — Mixing Statistics (Inline Speed Comparison)
+- **Feature**: Activity detail page shows inline comparisons of current activity's avg/max speed vs global averages for the same sport type.
+- **API Client pattern**: Added `SportStatisticsDto` record inside `ActivityApiClient` (following existing pattern of `MergePreviewDto`, `ActivityTypeDto` as nested records). Added `GetStatisticsBySportAsync()` method to fetch all sport statistics.
+- **Conditional rendering**: Only show comparison when `sportStats != null && sportStats.TotalActivities > 1` — prevents showing comparisons for sports with only one activity (no meaningful baseline).
+- **UI placement**: Inline caption below the avg speed stat card + separate card for max speed comparison below the main stats grid.
+- **Color coding**: Green (`#66bb6a`) for above average, grey (`#9e9e9e`) for below average. Used inline styles rather than MudBlazor color classes for precise control.
+- **Performance optimization**: Load sport statistics once in `LoadActivityAsync()` and filter client-side by sport name — avoids creating a new API endpoint for single-sport queries when the full list is small.
+- **Arrow indicators**: `↑` for faster than average, `↓` for slower than average — visual at-a-glance feedback.
+- **Branch**: `squad/4-mixing-stats-final`, **PR**: #64
+
 ---
 
 **2026-04-05:** Issue #41 (Merge Activities) shipped to dev. PR #44 merged. Built merge UI with checkboxes, config page, API client integration. Build clean. Feature ready for release.

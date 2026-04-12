@@ -248,3 +248,19 @@ CREATE TABLE IF NOT EXISTS import_errors (
 **PR:** #60  
 **Files changed:** my-gpx-activities.ApiService/Program.cs
 
+### Issue #4 — Mixing Statistics (Speed Comparison on Activity Detail)
+**Problem:** Users want to see how their current activity performance compares to their global averages for that sport type, directly on the activity detail page.
+
+**Solution:** Reused existing `/api/statistics/by-sport` endpoint — no new API endpoint needed! The `SportStatistics` model already includes `AverageSpeedMs` and `MaxSpeedMs` aggregated per sport type.
+
+**Design decision:** Rather than create a new single-sport endpoint (`GET /api/statistics/sport-averages/{sportType}`), we fetch all sport statistics once and filter client-side. This is more efficient because:
+1. The data set is small (typically < 20 sport types)
+2. Avoids an extra round-trip for a very similar query
+3. Could cache the full stats list in the future for reuse across pages
+
+**Key insight:** When building new features, always check if existing endpoints already provide the needed data before creating new ones. The `/api/statistics/by-sport` endpoint was designed for the global statistics page (issue #3) but serves this feature perfectly.
+
+**Branch:** squad/4-mixing-stats-final  
+**PR:** #64  
+**Files changed:** None (API work reused existing infrastructure)
+
