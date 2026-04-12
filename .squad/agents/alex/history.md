@@ -72,7 +72,18 @@
 - **Ordering**: Applied `OrderByDescending(a => a.StartDateTime)` to ensure newest activities appear first in the list, providing consistent chronological ordering.
 - **Store methods used**: `GetById()` for cache lookup, `AddOrUpdate()` for merge, `Remove()` for sync, all existed in `ActivityStore` — no new methods needed.
 
+### Issue #55 — Activities without GPX data don't show anything
+- **Problem**: Activities imported from Strava without GPS data (yoga, indoor watch activities) showed blank detail pages, even when heart rate data was available.
+- **Model updates**: Added `AverageHeartRate`, `MaxHeartRate`, and `Calories` nullable fields to `Activity` model, `ActivitySummary`, and `ActivityViewModel` to surface these metrics from the API.
+- **Conditional map rendering**: Wrapped the map card in `@if (activity.TrackCoordinates != null && activity.TrackCoordinates.Any())` so it only appears for activities with GPS data.
+- **No-GPS stats display**: For activities without GPS but with HR/calorie data, added a `MudGrid` with `MudPaper` cards showing avg/max/min heart rate and calories. Min HR computed from TrackData array where `p[3] != null`.
+- **Chart conditions**: Updated elevation/pace/cadence charts to require both GPS coordinates AND their respective data. HR chart now shows for ALL activities with HR data (regardless of GPS).
+- **JavaScript safety**: Updated `chartSync.js` `makeHoverHandler` and sync marker creation to check `trackData[idx][0] != null && trackData[idx][1] != null` before accessing lat/lon, preventing crashes on no-GPS activities.
+- **"No data" fallback**: Added `MudAlert Severity.Info` shown when neither GPS nor HR data exists, preventing truly blank pages.
+- **Result**: No-GPS activities (yoga, indoor training) now display meaningful HR charts, stats, and calorie information. Built and pushed to branch `squad/55-final`, PR #62 created.
+
 ---
 
 **2026-04-05:** Issue #41 (Merge Activities) shipped to dev. PR #44 merged. Built merge UI with checkboxes, config page, API client integration. Build clean. Feature ready for release.
 **2026-04-05:** Issue #50 (Activities not visible) fixed. Branch `fix/issue-50-activities-not-visible` pushed. Activities page now always reloads from API, preserving cached TrackData. Build clean.
+**2026-04-12:** Issue #55 (No-GPS activities) fixed. Branch `squad/55-final` pushed, PR #62 created. Activities without GPS now show HR chart, stats, and calories. Build passes.
