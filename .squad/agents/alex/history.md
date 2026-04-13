@@ -97,6 +97,7 @@
 **2026-04-05:** Issue #41 (Merge Activities) shipped to dev. PR #44 merged. Built merge UI with checkboxes, config page, API client integration. Build clean. Feature ready for release.
 **2026-04-05:** Issue #50 (Activities not visible) fixed. Branch `fix/issue-50-activities-not-visible` pushed. Activities page now always reloads from API, preserving cached TrackData. Build clean.
 **2026-04-12:** Issue #55 (No-GPS activities) fixed. Branch `squad/55-final` pushed, PR #62 created. Activities without GPS now show HR chart, stats, and calories. Build passes.
+**2026-04-13:** Resolved merge conflicts on concurrent PRs #61 and #62. PR #62 (`squad/55-final`): rebased onto dev, fixed silent merge artifact (duplicate `StreakWeek` in ActivityRepository.cs) by taking dev's version. PR #61 (`squad/56-fix`): created clean branch from dev with only Activities.razor SortMode change. Both PRs now at 0 conflicts, builds pass. Decision documented in decisions.md.
 
 ## Learnings
 

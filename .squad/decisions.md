@@ -742,3 +742,119 @@ Build value resolution order:
 3. Fallback: `"dev"`
 
 Registered as singleton in `webapp/Program.cs`.
+
+---
+
+### 2026-04-12: MudBlazor Grid Sorting Strategy
+
+**Date:** 2026-04-12  
+**Author:** Alex (Frontend Dev)  
+**Context:** Issue #56 - Activities not sorted by date
+
+## Problem
+
+Activities page was displaying activities in inconsistent order. The API returns activities sorted by `start_date_time DESC` (newest first), but the MudDataGrid was allowing users to override this order through interactive column sorting.
+
+## Root Cause
+
+`MudDataGrid` had `SortMode="Multiple"` and `SortBy` attributes on all PropertyColumns, enabling clickable column headers that could re-sort the data client-side.
+
+## Decision
+
+**Disable MudDataGrid sorting entirely** when displaying API data that should maintain a specific order.
+
+- Set `SortMode="None"` on MudDataGrid
+- Remove all `SortBy` attributes from PropertyColumns
+- Grid displays data in the exact order provided by the backend
+
+## Rationale
+
+1. **Single source of truth**: The API/backend owns the sort logic, especially when pagination or database-level sorting is involved
+2. **Prevents user confusion**: Users don't expect to be able to re-sort a chronological activity list
+3. **Simplicity**: No need to synchronize client and server sort state
+4. **Performance**: Avoids client-side re-sorting of large datasets
+
+## When to Use Interactive Sorting
+
+Consider enabling `SortMode="Multiple"` when:
+- Data is fully loaded client-side (no pagination)
+- Users benefit from sorting by different columns (e.g., a product catalog)
+- There's no canonical backend sort order that must be preserved
+
+## Pattern for Future Grids
+
+**For activity/chronological lists:** `SortMode="None"`, let API control order  
+**For reference/lookup data:** `SortMode="Multiple"` with `SortBy` attributes for flexibility
+
+## Files Changed
+
+- `webapp/Components/Pages/Activities.razor` - MudDataGrid configuration
+
+## Related
+
+- Issue #56
+- PR #61
+
+---
+
+### 2026-04-12: Reuse Existing /api/statistics/by-sport for Activity Detail Comparisons
+
+**Date:** 2026-04-12  
+**Issue:** #4 — Mixing Statistics  
+**Author:** Naomi (backend) + Alex (frontend)  
+**PR:** #64
+
+## Context
+Issue #4 required showing how an activity's speed metrics compare to global averages for that sport type. The initial plan suggested creating a new endpoint `GET /api/statistics/sport-averages/{sportType}`.
+
+## Decision
+**Reused existing `/api/statistics/by-sport` endpoint** instead of creating a new single-sport endpoint.
+
+## Rationale
+
+### Why reuse?
+1. **Already exists**: The endpoint was built for issue #3 (global statistics page) and returns all needed data: `AverageSpeedMs` and `MaxSpeedMs` per sport
+2. **Small dataset**: Typically < 20 sport types per user — fetching all sports is cheap (< 1KB response)
+3. **Client-side filtering**: Simple `allStats.FirstOrDefault(s => s.SportName == activity.ActivityType)` is fast and efficient
+4. **Future-proof**: If we cache sport statistics client-side later, multiple pages can reuse the same cached data
+
+### Why NOT create a new endpoint?
+1. **Redundant query**: `SELECT AVG(avg_speed), MAX(max_speed) FROM activities WHERE activity_type = @sportType` is a subset of what `/api/statistics/by-sport` already does
+2. **API surface area**: Adding endpoints increases maintenance burden — prefer reuse when data needs overlap
+3. **No performance gain**: Single-sport query would save ~500 bytes but adds a round-trip for setup/teardown
+
+## Implementation
+- **Frontend**: Added `GetStatisticsBySportAsync()` to `ActivityApiClient` to call existing endpoint
+- **Backend**: No changes needed — existing `GetStatisticsBySportAsync()` in `ActivityRepository` already does the work
+- **UI**: Conditionally show comparison only when `sportStats.TotalActivities > 1` (meaningful baseline exists)
+
+## Lessons
+- Always audit existing endpoints before designing new ones
+- Small datasets (< 100 records) favor client-side filtering over creating specialized queries
+- Feature infrastructure from prior issues can serve new features — good API design compounds
+
+---
+
+### 2026-04-13: Concurrent Agent Branches and Silent Merge Artifacts
+
+**Date:** 2026-04-13  
+**Author:** Alex (Infrastructure/DevOps)  
+**Context:** v0.3.2 sprint PR conflict resolution (PRs #61, #62)
+
+## Pattern Observed
+
+During v0.3.2, seven agents ran concurrently. All branched from the same state of `dev`. Five PRs merged cleanly. Two (`squad/55-final` / PR #62 and `squad/56-fix` / PR #61) were blocked because two subsequent PRs (#63 global statistics, #64 sport comparison) landed on `dev` before those branches were merged.
+
+The divergence affected two files:
+- **ActivityRepository.cs** — both branches had a manually applied brace fix that dev also had, plus dev gained new GlobalStatistics methods. Rebase auto-merged but produced a duplicate `StreakWeek` inner class — a **silent merge artifact** that only failed at build time.
+- **ActivityDetail.razor** — one branch had HR chart features; dev gained sport comparison features. These were independent, non-overlapping additions that had to coexist in the merged result.
+
+## Resolution Applied
+
+**PR #62 (`squad/55-final`):** Rebased onto `origin/dev`. Git auto-merged `ActivityDetail.razor` correctly (both feature sets present). The duplicate `StreakWeek` in `ActivityRepository.cs` was fixed by checking out `origin/dev`'s version and amending the top commit. Build verified before push.
+
+**PR #61 (`squad/56-fix`):** The branch's only meaningful change was `SortMode="None"` in `Activities.razor`, sitting on top of many diverged commits. Used the clean branch approach: created `squad/56-fix-clean` from `origin/dev`, applied only the `Activities.razor` change, committed, built, then force-pushed to `squad/56-fix`. Clean 1-commit diff.
+
+## Recommendation
+
+When concurrent agents are expected, consider staggering branch creation so each agent starts from the most recent `dev`. Alternatively, establish a post-sprint rebase step as part of the PR checklist. Always run `dotnet build` after rebase even when git reports no conflicts — silent merge artifacts (duplicate class definitions) are not caught by git.

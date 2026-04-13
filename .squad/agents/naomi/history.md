@@ -264,3 +264,27 @@ CREATE TABLE IF NOT EXISTS import_errors (
 **PR:** #64  
 **Files changed:** None (API work reused existing infrastructure)
 
+### Concurrent Agent Brace Collision (Issue #56, Issue #55)
+**Problem:** Both PR #61 (`squad/56-fix`) and PR #62 (`squad/55-final`) failed CI with identical error:
+```
+ActivityRepository.cs(343,2): error CS1513: } expected
+```
+
+**Root cause:** Two agents independently modified `ActivityRepository.cs` and both missed the closing brace `}` for the `SportStatisticsDto` class before the `StreakWeek` nested class began (line ~337). The missing brace caused compilation to fail.
+
+**Pattern identified:** When multiple agents work on the same file concurrently in different branches, structural syntax errors (like missing braces) can be duplicated across branches. This indicates a coordination gap in the concurrent agent workflow.
+
+**Fix applied:** Added the missing closing brace after `Total_Elevation_Gain_Meters` property in both branches:
+```csharp
+    public double Total_Elevation_Gain_Meters { get; set; }
+    }   // closes SportStatisticsDto
+
+    private class StreakWeek
+```
+
+**Verification:** Ran `dotnet build my-gpx-activities.ApiService --no-restore` on both branches — builds succeeded with 0 errors.
+
+**Branches fixed:** squad/56-fix (commit 0da039b), squad/55-final (commit 878af85)  
+**PRs impacted:** #61, #62  
+**Files changed:** my-gpx-activities.ApiService/Data/ActivityRepository.cs
+
