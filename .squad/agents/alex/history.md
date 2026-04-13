@@ -97,3 +97,11 @@
 **2026-04-05:** Issue #41 (Merge Activities) shipped to dev. PR #44 merged. Built merge UI with checkboxes, config page, API client integration. Build clean. Feature ready for release.
 **2026-04-05:** Issue #50 (Activities not visible) fixed. Branch `fix/issue-50-activities-not-visible` pushed. Activities page now always reloads from API, preserving cached TrackData. Build clean.
 **2026-04-12:** Issue #55 (No-GPS activities) fixed. Branch `squad/55-final` pushed, PR #62 created. Activities without GPS now show HR chart, stats, and calories. Build passes.
+
+## Learnings
+
+### Concurrent agent branches diverge when later PRs land on dev
+When multiple agents branch from the same dev state and work concurrently, the branches can diverge if new PRs land on dev before the agents finish. On this sprint, `squad/55-final` and `squad/56-fix` both missed PR #63 (global statistics) and PR #64 (sport comparison), which touched `ActivityRepository.cs` and `ActivityDetail.razor` respectively. The rebase auto-merged most changes cleanly but produced a duplicate `StreakWeek` inner class in `ActivityRepository.cs` — a silent merge artifact that only surfaced at build time. Always run `dotnet build` after a rebase even if git reports no conflicts.
+
+### Clean branch approach for simple fixes on conflict-heavy branches
+When a branch contains a single meaningful commit on top of a long diverged history (like `squad/56-fix` which only needed `SortMode="None"`), the fastest conflict resolution is to create a fresh branch from `origin/dev` and cherry-pick only the desired change, then force-push to replace the old branch. This avoids untangling multi-level conflicts and produces a minimal, reviewable diff.
