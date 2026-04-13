@@ -36,7 +36,7 @@ public class ActivityRepository : IActivityRepository
             ORDER BY start_date_time DESC
             """);
 
-        return activities.Select(MapToActivity);
+        return activities.Select(MapToActivity).ToList();
     }
 
     public async Task<Activity?> GetActivityByIdAsync(Guid id)
