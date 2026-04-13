@@ -82,7 +82,7 @@ else
 
     <MudDataGrid T="ActivitySummary"
                 Items="FilteredActivities"
-                SortMode="SortMode.Multiple"
+                SortMode="SortMode.None"
                 Filterable="false"
                 Striped="true"
                 Bordered="true"
@@ -115,7 +115,7 @@ else
                 </CellTemplate>
             </TemplateColumn>
 
-            <PropertyColumn Property="x => x.StartDateTime" Title="Date" SortBy="x => x.StartDateTime">
+            <PropertyColumn Property="x => x.StartDateTime" Title="Date">
                 <CellTemplate>
                     <MudStack Spacing="0">
                         <MudText Typo="Typo.body2">@context.Item.StartDateTime.ToString("MMM dd, yyyy")</MudText>
@@ -124,7 +124,7 @@ else
                 </CellTemplate>
             </PropertyColumn>
 
-            <PropertyColumn Property="x => x.Title" Title="Activity" SortBy="x => x.Title">
+            <PropertyColumn Property="x => x.Title" Title="Activity">
                 <CellTemplate>
                     <MudStack Spacing="0">
                         <MudText Typo="Typo.body2">@context.Item.Title</MudText>
@@ -133,13 +133,13 @@ else
                 </CellTemplate>
             </PropertyColumn>
 
-            <PropertyColumn Property="x => x.DistanceMeters" Title="Distance" SortBy="x => x.DistanceMeters">
+            <PropertyColumn Property="x => x.DistanceMeters" Title="Distance">
                 <CellTemplate>
                     <MudText Typo="Typo.body2">@FormatDistance(context.Item.DistanceMeters)</MudText>
                 </CellTemplate>
             </PropertyColumn>
 
-            <PropertyColumn Property="x => x.ElevationGainMeters" Title="Elevation" SortBy="x => x.ElevationGainMeters">
+            <PropertyColumn Property="x => x.ElevationGainMeters" Title="Elevation">
                 <CellTemplate>
                     <MudText Typo="Typo.body2">
                         <MudIcon Icon="@Icons.Material.Filled.Terrain" Size="Size.Small" />
@@ -148,7 +148,7 @@ else
                 </CellTemplate>
             </PropertyColumn>
 
-            <PropertyColumn Property="x => x.AverageSpeedMs" Title="Avg Speed" SortBy="x => x.AverageSpeedMs">
+            <PropertyColumn Property="x => x.AverageSpeedMs" Title="Avg Speed">
                 <CellTemplate>
                     <MudText Typo="Typo.body2">@FormatSpeed(context.Item.AverageSpeedMs)</MudText>
                 </CellTemplate>
