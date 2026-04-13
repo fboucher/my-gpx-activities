@@ -368,12 +368,6 @@ public class ActivityRepository : IActivityRepository
         public double Max_Speed_Ms { get; set; }
         public double Max_Duration_Seconds { get; set; }
         public double Total_Elevation_Gain_Meters { get; set; }
-    
-    private class StreakWeek
-    {
-        public int First_Week { get; set; }
-        public int Last_Week { get; set; }
-        public int Streak_Length { get; set; }
     }
 
     private class StreakWeek
