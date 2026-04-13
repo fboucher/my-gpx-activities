@@ -951,3 +951,51 @@ return Results.Ok(response);
 - All GET endpoints returning collections
 - Repository methods returning `IEnumerable<T>`
 - Any LINQ projection that will be JSON-serialized
+
+---
+
+### 2026-04-14: Blazor StreamRendering + JSInterop Initialization Pattern
+
+**Author:** Alex  
+**Status:** Accepted
+
+#### Context
+
+`ActivityDetail.razor` uses `@attribute [StreamRendering(true)]` to show a loading spinner while activity data loads. With streaming rendering, the component renders in two phases:
+
+1. **Phase 1** — `activity == null` → spinner rendered. `OnAfterRenderAsync(firstRender: true)` fires here. Map `<div>` and chart `<canvas>` elements do **not** exist in the DOM yet.
+2. **Phase 2** — Data arrives → real content rendered. `OnAfterRenderAsync(firstRender: false)` fires.
+
+The original guard `if (firstRender && activity != null)` was always false: on firstRender, activity is null; on subsequent renders, firstRender is false. JS initialization never ran on SPA navigation. F5 bypassed streaming (renders in one shot), so it always worked.
+
+#### Decision
+
+Use a `_initialized` flag to gate JS initialization on data presence, not render count:
+
+```csharp
+private bool _initialized = false;
+
+protected override async Task OnAfterRenderAsync(bool firstRender)
+{
+    if (activity != null && !_initialized)
+    {
+        _initialized = true;
+        await InitializeMap();
+        await InitializeCharts();
+    }
+}
+```
+
+Reset `_initialized = false` in:
+- `DisposeAsync` — so navigating away and back re-initializes correctly
+- `OnParametersSetAsync` (when `Id` changes) — handles Blazor component reuse between different activity pages
+
+#### Consequences
+
+- Map and charts initialize after activity data is present and DOM elements exist
+- Works correctly on both SPA navigation and full page reload
+- No double-initialization: the `destroyActivityCharts()` call in `DisposeAsync` (and at the top of `initActivityCharts` in JS) handles cleanup
+
+#### Rule
+
+> When combining `@attribute [StreamRendering(true)]` with JS interop on Blazor Server, **never guard JS init on `firstRender` alone**. Always use a content-ready check (`data != null`) combined with a one-shot `_initialized` flag.

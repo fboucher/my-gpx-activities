@@ -106,3 +106,10 @@ When multiple agents branch from the same dev state and work concurrently, the b
 
 ### Clean branch approach for simple fixes on conflict-heavy branches
 When a branch contains a single meaningful commit on top of a long diverged history (like `squad/56-fix` which only needed `SortMode="None"`), the fastest conflict resolution is to create a fresh branch from `origin/dev` and cherry-pick only the desired change, then force-push to replace the old branch. This avoids untangling multi-level conflicts and produces a minimal, reviewable diff.
+
+### StreamRendering + JSInterop timing bug (ActivityDetail.razor)
+- **Root cause**: `@attribute [StreamRendering(true)]` causes `OnAfterRenderAsync(firstRender: true)` to fire during the loading spinner phase, before the map `<div>` and chart `<canvas>` elements exist in the DOM. The old `if (firstRender && activity != null)` guard was false on first render (activity is null) and false on all subsequent renders (firstRender is false). Result: JS initialization never ran on SPA navigation; only F5 worked.
+- **Fix**: Replace `firstRender` guard with a `_initialized` flag. `OnAfterRenderAsync` now runs JS init when `activity != null && !_initialized`, then sets `_initialized = true`. This ties initialization to data availability, not render count.
+- **Dispose reset**: `_initialized = false` reset in `DisposeAsync` before calling `destroyActivityCharts`, so navigating away and back creates a fresh init cycle.
+- **OnParametersSetAsync**: Added override that resets `_initialized = false` and reloads when `Id` parameter changes — handles the edge case of Blazor reusing the component when navigating between two different activity pages.
+- **Pattern rule**: When combining `StreamRendering` with JS interop on Blazor Server, never rely on `firstRender` alone. Use a content-ready flag (`activity != null`) combined with a one-shot `_initialized` guard to ensure DOM elements exist before calling JS.
