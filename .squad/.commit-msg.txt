@@ -1,0 +1,7 @@
+chore: log v0.3.2 release session [skip ci]
+
+- Add session log: 7 PRs merged to dev, 2 hotfixes, PR #65 cut and released
+- Add orchestration log for Bobbie's release run
+- v0.3.2 tagged and published to GitHub
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
