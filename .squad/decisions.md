@@ -858,3 +858,96 @@ The divergence affected two files:
 ## Recommendation
 
 When concurrent agents are expected, consider staggering branch creation so each agent starts from the most recent `dev`. Alternatively, establish a post-sprint rebase step as part of the PR checklist. Always run `dotnet build` after rebase even when git reports no conflicts — silent merge artifacts (duplicate class definitions) are not caught by git.
+
+
+---
+
+## 2026-04-13: Dapper SQL-to-C# Naming Convention
+
+**Date:** 2026-04-13  
+**Author:** Naomi (Backend Dev)  
+**Related fix:** commit 33e15f5 (Dapper materialization error on `/api/statistics/global`)
+
+### Context
+
+The statistics endpoint threw `System.InvalidOperationException` at runtime because `GetGlobalStatisticsAsync` queried directly into positional C# records (`DayActivityCount`, `MonthActivityCount`, `YearSummary`, `SportCount`). Dapper's constructor-parameter matching is case-insensitive but **underscore-sensitive**, so `week_number` (SQL) does not bind to `WeekNumber` (C# parameter).
+
+### Decision
+
+**Never query Dapper directly into public record types that have PascalCase constructor parameters.**
+
+Always use a private DTO class with snake_case property names that match SQL column output exactly, then project to the public type in application code. This is already the established pattern in `ActivityRepository` (`ActivityDto`, `SportStatisticsDto`, `HeatMapDto`, `StreakWeek`).
+
+### Rule
+
+> Any new Dapper query result type must be either:
+> 1. A private DTO class with snake_case properties (preferred for SQL-facing types), **or**
+> 2. A plain class/record whose property/parameter names exactly match the SQL column names (case-insensitive, no underscore mismatch).
+>
+> Public records with PascalCase constructors must **not** be used as direct Dapper query targets.
+
+### Rationale
+
+- Prevents silent runtime failures that only surface when the endpoint is actually called.
+- Keeps public API models clean and decoupled from SQL naming conventions.
+- Consistent with existing repo patterns — reduces surprise for future contributors.
+
+### Alternatives Considered
+
+- **Rename SQL aliases to PascalCase** (e.g., `week_number` → `WeekNumber`): Works but mixes naming conventions in SQL, harder to read at the DB level.
+- **Add a Dapper type handler / column mapping**: Adds infrastructure complexity that isn't needed when the DTO pattern already works.
+
+---
+
+## 2026-04-13: LINQ Collection Materialization in API Endpoints
+
+**Date:** 2026-04-13  
+**Author:** Naomi (Backend Dev)  
+**Related issues:** #57 (activities list truncation), #59 (fix implementation)
+
+### Context
+
+Chained deferred LINQ execution (.Select() on .Select()) can cause silent response truncation when exceptions occur during JSON serialization.
+
+### Problem
+
+When API endpoints return `IEnumerable<T>` with deferred LINQ operations, ASP.NET Core's JSON serializer enumerates the collection during response writing. If an exception occurs during enumeration (null reference, data corruption, serialization error), it can cause silent truncation mid-stream rather than proper error handling.
+
+**Problematic pattern:**
+```csharp
+// Repository
+return activities.Select(MapToActivity);  // Deferred
+
+// Endpoint
+var response = activities.Select(a => new { ... });  // Deferred on deferred
+return Results.Ok(response);  // Serializer enumerates here
+```
+
+If MapToActivity throws or serialization fails partway through, you get partial results (e.g., 11 out of 20 items).
+
+### Decision
+
+Always materialize collections with `.ToList()` or `.ToArray()` before returning from API endpoints and repositories.
+
+**Correct pattern:**
+```csharp
+// Repository
+return activities.Select(MapToActivity).ToList();  // Materialized
+
+// Endpoint
+var response = activities.Select(a => new { ... }).ToList();  // Materialized
+return Results.Ok(response);
+```
+
+### Benefits
+
+1. Exceptions occur within the async method's scope and are caught by exception handler middleware
+2. Proper 500 errors instead of silent truncation
+3. Better debuggability — full stack trace instead of mid-serialization failure
+4. More predictable behavior
+
+### Applies To
+
+- All GET endpoints returning collections
+- Repository methods returning `IEnumerable<T>`
+- Any LINQ projection that will be JSON-serialized

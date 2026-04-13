@@ -288,3 +288,19 @@ ActivityRepository.cs(343,2): error CS1513: } expected
 **PRs impacted:** #61, #62  
 **Files changed:** my-gpx-activities.ApiService/Data/ActivityRepository.cs
 
+---
+
+## 2025-01-27 — Dapper positional record materialization fix
+
+**Task:** Fix `System.InvalidOperationException` on `/api/statistics/global` — Dapper could not materialize `DayActivityCount` and sibling records because their positional C# constructor parameters (PascalCase) did not match the SQL column aliases (snake_case).
+
+**Root cause:** Dapper matches SQL column names to constructor parameter names case-insensitively but is underscore-sensitive. `week_number` does NOT match `WeekNumber`; they are treated as different names.
+
+**Pattern learned:** When querying into positional C# records with Dapper, SQL column aliases must exactly match the record constructor parameter names (case-insensitive, but underscores matter). The safest and most consistent approach for this repo is to **never query directly into public record types** — always use a private DTO class with snake_case properties matching SQL column names, then project to the public type.
+
+**Fix applied:** Added four private DTO classes inside `ActivityRepository` (`DayActivityCountDto`, `MonthActivityCountDto`, `YearSummaryDto`, `SportCountDto`) with snake_case properties matching SQL output. `GetGlobalStatisticsAsync` now queries into the DTOs and projects to the public records. This aligns with the established pattern (`ActivityDto`, `SportStatisticsDto`, `StreakWeek`, `HeatMapDto`).
+
+**Build:** `dotnet build --no-restore` — 0 warnings, 0 errors.  
+**Commit:** 33e15f5 on `dev`  
+**Files changed:** `my-gpx-activities.ApiService/Data/ActivityRepository.cs`
+
