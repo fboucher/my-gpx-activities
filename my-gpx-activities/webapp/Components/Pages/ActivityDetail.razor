@@ -241,6 +241,7 @@ else
 
     private ActivityViewModel? activity;
     private string? errorMessage;
+    private webapp.Services.ActivityApiClient.SportStatisticsDto? sportStats;
 
     private async Task OpenEditDialog()
     {
@@ -359,6 +360,9 @@ else
             TrackCoordinates = storedActivity.TrackCoordinates,
             TrackData = storedActivity.TrackData
         };
+
+        // Load sport statistics for comparison
+        await LoadSportStatisticsAsync();
     }
 
     private async Task InitializeMap()
@@ -374,6 +378,22 @@ else
         {
             // Map initialization failed - could show a fallback message
             Console.WriteLine($"Map initialization failed: {ex.Message}");
+        }
+    }
+
+    private async Task LoadSportStatisticsAsync()
+    {
+        if (activity == null) return;
+
+        try
+        {
+            var allStats = await ActivityApiClient.GetStatisticsBySportAsync();
+            sportStats = allStats.FirstOrDefault(s => s.SportName == activity.ActivityType);
+        }
+        catch (Exception ex)
+        {
+            // Failed to load sport statistics - non-critical, just skip comparison
+            Console.WriteLine($"Failed to load sport statistics: {ex.Message}");
         }
     }
 
