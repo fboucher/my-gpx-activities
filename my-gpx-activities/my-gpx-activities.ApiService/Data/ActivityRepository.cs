@@ -273,7 +273,42 @@ public class ActivityRepository : IActivityRepository
         });
     }
 
-        private static Activity MapToActivity(ActivityDto dto)
+    
+    public async Task<GlobalStatistics> GetGlobalStatisticsAsync()
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync();
+        var streakData = await connection.QueryAsync<StreakWeek>("""
+            WITH weekly_activity AS (SELECT DISTINCT EXTRACT(YEAR FROM start_date_time)::int as year, EXTRACT(WEEK FROM start_date_time)::int as week FROM activities ORDER BY year, week),
+            week_with_row AS (SELECT year, week, year * 100 + week as year_week, ROW_NUMBER() OVER (ORDER BY year, week) as rn FROM weekly_activity),
+            streak_groups AS (SELECT year, week, year_week, year_week - rn as streak_group FROM week_with_row),
+            streaks AS (SELECT MIN(year_week) as first_week, MAX(year_week) as last_week, COUNT(*) as streak_length FROM streak_groups GROUP BY streak_group)
+            SELECT first_week, last_week, streak_length FROM streaks ORDER BY streak_length DESC, last_week DESC
+            """);
+        var streaks = streakData.ToList();
+        var longestStreak = streaks.FirstOrDefault()?.Streak_Length ?? 0;
+        var now = DateTime.UtcNow;
+        var currentYearWeek = (now.Year * 100) + (int)System.Globalization.ISOWeek.GetWeekOfYear(now);
+        var currentStreak = streaks.FirstOrDefault(s => s.Last_Week >= currentYearWeek - 1);
+        var currentWeekStreak = currentStreak?.Streak_Length ?? 0;
+        var activityDaysByWeek = await connection.QueryAsync<DayActivityCount>("""
+            SELECT EXTRACT(WEEK FROM start_date_time)::int as week_number, EXTRACT(YEAR FROM start_date_time)::int as year, COUNT(DISTINCT DATE(start_date_time)) as days_with_activities
+            FROM activities WHERE start_date_time >= NOW() - INTERVAL '12 weeks' GROUP BY year, week_number ORDER BY year DESC, week_number DESC
+            """);
+        var activityDaysByMonth = await connection.QueryAsync<MonthActivityCount>("""
+            SELECT EXTRACT(MONTH FROM start_date_time)::int as month, EXTRACT(YEAR FROM start_date_time)::int as year, COUNT(DISTINCT DATE(start_date_time)) as days_with_activities
+            FROM activities WHERE start_date_time >= NOW() - INTERVAL '12 months' GROUP BY year, month ORDER BY year DESC, month DESC
+            """);
+        var yearRecap = await connection.QueryAsync<YearSummary>("""
+            SELECT EXTRACT(YEAR FROM start_date_time)::int as year, COUNT(*)::int as total_activities, (SUM(distance_meters) / 1000.0) as total_distance_km,
+            (SUM(EXTRACT(EPOCH FROM (end_date_time - start_date_time))) / 60.0) as total_duration_minutes FROM activities GROUP BY year ORDER BY year DESC
+            """);
+        var sportCounts = await connection.QueryAsync<SportCount>("""
+            SELECT activity_type as sport_type, COUNT(*)::int as count FROM activities GROUP BY activity_type ORDER BY count DESC
+            """);
+        return new GlobalStatistics(currentWeekStreak, longestStreak, activityDaysByWeek, activityDaysByMonth, yearRecap, sportCounts);
+    }
+
+    private static Activity MapToActivity(ActivityDto dto)
     {
         return new Activity
         {
@@ -333,5 +368,12 @@ public class ActivityRepository : IActivityRepository
         public double Max_Speed_Ms { get; set; }
         public double Max_Duration_Seconds { get; set; }
         public double Total_Elevation_Gain_Meters { get; set; }
+    }
+
+    private class StreakWeek
+    {
+        public int First_Week { get; set; }
+        public int Last_Week { get; set; }
+        public int Streak_Length { get; set; }
     }
 }
