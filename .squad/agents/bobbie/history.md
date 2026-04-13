@@ -62,3 +62,14 @@ Key learnings:
 - The Aspire workload must be installed in the post-create hook to enable full orchestration capabilities
 - Adding a Codespaces badge to the README with the format `https://codespaces.new/{owner}/{repo}` provides quick access
 - Decision documented in `.squad/decisions/inbox/bobbie-devcontainer.md`
+
+### 2026-04-13: v0.3.2 Release Cut
+
+Cut the v0.3.2 release to `main` with PR #65. Release includes 5 new features, 3 bug fixes, and 2 hotfixes from the dev branch.
+
+Key learnings:
+- Merge conflicts occurred when merging dev → main due to version bumping (0.3.2 vs 0.3.0) and exception handling improvements in dev.
+- Resolved by fetching origin/main into dev, then accepting dev's version (which contains all the merged features and better logging).
+- After conflict resolution, pushed dev and successfully merged PR #65 with `--merge` flag (preserving history).
+- Tagged v0.3.2 on main and created GitHub release with full feature/bug/hotfix notes.
+- Release URL: https://github.com/fboucher/my-gpx-activities/releases/tag/v0.3.2
