@@ -104,8 +104,8 @@ window.initActivityCharts = function(trackData, mapId) {
             const chartIdx = active[0].index;
             // Map chart index back to original trackData index
             const originalIdx = indexMap ? indexMap[chartIdx] : chartIdx;
-            // Map marker — use original trackData index
-            if (syncMarker && trackData[originalIdx]) {
+            // Map marker — use original trackData index (only for activities with GPS data)
+            if (syncMarker && trackData[originalIdx] && trackData[originalIdx][0] != null && trackData[originalIdx][1] != null) {
                 syncMarker.setLatLng([trackData[originalIdx][0], trackData[originalIdx][1]]);
             }
             // Sync crosshair on all charts
@@ -304,7 +304,8 @@ window.initActivityCharts = function(trackData, mapId) {
     });
 
     // Create sync marker on Leaflet map (the map variable is `window._leafletMap`)
-    if (window._leafletMap && trackData.length > 0) {
+    // Only for activities with GPS data (lat/lon in first two positions)
+    if (window._leafletMap && trackData.length > 0 && trackData[0][0] != null && trackData[0][1] != null) {
         syncMarker = L.circleMarker([trackData[0][0], trackData[0][1]], {
             radius: 8,
             color: '#2563eb',
