@@ -302,6 +302,8 @@ else
     private ActivityViewModel? activity;
     private string? errorMessage;
     private webapp.Services.ActivityApiClient.SportStatisticsDto? sportStats;
+    private bool _initialized = false;
+    private Guid _loadedId;
 
     private async Task OpenEditDialog()
     {
@@ -359,13 +361,26 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        _loadedId = Id;
         await LoadActivityAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId != Id)
+        {
+            _initialized = false;
+            activity = null;
+            _loadedId = Id;
+            await LoadActivityAsync();
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && activity != null)
+        if (activity != null && !_initialized)
         {
+            _initialized = true;
             await InitializeMap();
             if (activity.TrackData != null && activity.TrackData.Any())
             {
@@ -508,6 +523,7 @@ else
 
     public async ValueTask DisposeAsync()
     {
+        _initialized = false;
         try { await JSRuntime.InvokeVoidAsync("destroyActivityCharts"); }
         catch { }
     }
