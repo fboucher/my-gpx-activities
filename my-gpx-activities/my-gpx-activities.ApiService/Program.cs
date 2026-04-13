@@ -129,7 +129,8 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
     }
     catch (Exception ex)
     {
-        return Results.Problem($"Error processing GPX file: {ex.Message}");
+        app.Logger.LogError(ex, "Error processing GPX file during import");
+        return Results.Problem("An error occurred while processing the GPX file. Please try again.");
     }
 })
 .WithName("ImportGpxActivity");
@@ -224,7 +225,8 @@ app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxPars
             }
             catch (Exception ex)
             {
-                return result with { ErrorMessage = ex.Message };
+                app.Logger.LogError(ex, "Error processing file {FileName} in batch import", file.FileName);
+                return result with { ErrorMessage = "An error occurred while processing this file." };
             }
         });
 
@@ -244,7 +246,8 @@ app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxPars
     }
     catch (Exception ex)
     {
-        return Results.Problem($"Error processing batch import: {ex.Message}");
+        app.Logger.LogError(ex, "Error processing batch import request");
+        return Results.Problem("An error occurred while processing the batch import. Please try again.");
     }
 })
 .WithName("BatchImportGpxActivities")
@@ -279,11 +282,13 @@ app.MapPost("/api/activities/smart-merge", async (HttpRequest request, ISmartMer
     }
     catch (InvalidDataException ex)
     {
-        return Results.BadRequest($"Invalid file format: {ex.Message}");
+        app.Logger.LogWarning(ex, "Invalid file format");
+        return Results.BadRequest("Invalid file format. Please ensure both files are valid GPX and FIT files.");
     }
     catch (Exception ex)
     {
-        return Results.Problem($"Error merging files: {ex.Message}");
+        app.Logger.LogError(ex, "Error merging GPX and FIT files");
+        return Results.Problem("An error occurred while merging the files. Please try again.");
     }
 })
 .WithName("SmartMergeGpxFit")
@@ -375,11 +380,13 @@ app.MapPost("/api/activities/smart-merge/import", async (HttpRequest request, IS
     }
     catch (InvalidDataException ex)
     {
-        return Results.BadRequest($"Invalid file format: {ex.Message}");
+        app.Logger.LogWarning(ex, "Invalid file format");
+        return Results.BadRequest("Invalid file format. Please ensure both files are valid GPX and FIT files.");
     }
     catch (Exception ex)
     {
-        return Results.Problem($"Error processing files: {ex.Message}");
+        app.Logger.LogError(ex, "Error processing smart merge import");
+        return Results.Problem("An error occurred while processing the files. Please try again.");
     }
 })
 .WithName("SmartMergeAndImportActivity")
@@ -406,7 +413,8 @@ app.MapPost("/api/activities/import/strava", async (
     }
     catch (Exception ex)
     {
-        return Results.Problem($"Error importing Strava activity: {ex.Message}");
+        app.Logger.LogError(ex, "Error importing Strava activity");
+        return Results.Problem("An error occurred while importing the Strava activity. Please try again.");
     }
 })
 .WithName("ImportStravaActivity")
@@ -430,7 +438,7 @@ app.MapGet("/api/activities", async (IActivityRepository repository) =>
         a.MaxSpeedMs,
         TrackPoints = a.TrackPointCount,
         a.CreatedAt
-    });
+    }).ToList();
 
     return Results.Ok(response);
 })
@@ -530,6 +538,14 @@ app.MapGet("/api/statistics/by-sport", async (IActivityRepository repository) =>
 .WithName("GetStatisticsBySport")
 .WithDescription("Get aggregated statistics grouped by sport type");
 
+app.MapGet("/api/statistics/global", async (IActivityRepository repository) =>
+{
+    var statistics = await repository.GetGlobalStatisticsAsync();
+    return Results.Ok(statistics);
+})
+.WithName("GetGlobalStatistics")
+.WithDescription("Get global statistics including streaks, activity days, year recap, and sport breakdown");
+
 app.MapGet("/api/activities/heatmap", async (
     IActivityRepository repository,
     DateOnly? dateFrom,
@@ -558,11 +574,13 @@ app.MapGet("/api/activities/merge/preview", async (
     }
     catch (KeyNotFoundException ex)
     {
-        return Results.NotFound(ex.Message);
+        app.Logger.LogWarning(ex, "Activity not found");
+        return Results.NotFound("One or both activities not found.");
     }
     catch (Exception ex)
     {
-        return Results.Problem($"Error generating merge preview: {ex.Message}");
+        app.Logger.LogError(ex, "Error generating merge preview");
+        return Results.Problem("An error occurred while generating the merge preview. Please try again.");
     }
 })
 .WithName("GetMergePreview")
@@ -577,15 +595,18 @@ app.MapPost("/api/activities/merge", async (MergeRequest request, IActivityMerge
     }
     catch (KeyNotFoundException ex)
     {
-        return Results.NotFound(ex.Message);
+        app.Logger.LogWarning(ex, "Activity not found");
+        return Results.NotFound("One or both activities not found.");
     }
     catch (ArgumentException ex)
     {
-        return Results.BadRequest(ex.Message);
+        app.Logger.LogWarning(ex, "Invalid merge request");
+        return Results.BadRequest("Invalid merge request. Please check your input and try again.");
     }
     catch (Exception ex)
     {
-        return Results.Problem($"Error merging activities: {ex.Message}");
+        app.Logger.LogError(ex, "Error merging activities");
+        return Results.Problem("An error occurred while merging the activities. Please try again.");
     }
 })
 .WithName("MergeActivities")

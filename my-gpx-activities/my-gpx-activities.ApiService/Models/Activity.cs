@@ -39,5 +39,9 @@ public class Activity
     // Note: older stored activities may have 5-element arrays (no cadence slot); consumers must handle both lengths.
     public string? TrackDataJson { get; set; }
 
+    public double? AverageHeartRate { get; set; }
+    public double? MaxHeartRate { get; set; }
+    public double? Calories { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

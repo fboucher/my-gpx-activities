@@ -20,6 +20,18 @@ public class ActivityApiClient(IHttpClientFactory httpClientFactory)
 
     public record MergeRequest(Guid ActivityAId, Guid ActivityBId, string Mode, string SportType, string Name);
 
+    public record SportStatisticsDto(
+        string SportName,
+        string? Icon,
+        string? Color,
+        int TotalActivities,
+        double TotalDistanceMeters,
+        double TotalDurationSeconds,
+        double AverageSpeedMs,
+        double MaxSpeedMs,
+        double MaxDurationSeconds,
+        double TotalElevationGainMeters);
+
     private record UpdateActivityRequest(string? Title, string? ActivityType);
     private record MergeResponse(Guid Id);
 
@@ -81,5 +93,11 @@ public class ActivityApiClient(IHttpClientFactory httpClientFactory)
     {
         var response = await _client.DeleteAsync($"/api/activities/{id}", cancellationToken);
         return response.IsSuccessStatusCode;
+    }
+
+    public async Task<List<SportStatisticsDto>> GetStatisticsBySportAsync(CancellationToken cancellationToken = default)
+    {
+        var result = await _client.GetFromJsonAsync<List<SportStatisticsDto>>("/api/statistics/by-sport", cancellationToken);
+        return result ?? [];
     }
 }

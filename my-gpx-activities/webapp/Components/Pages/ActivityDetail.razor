@@ -62,18 +62,64 @@ else
         </MudItem>
     </MudGrid>
 
-    <MudCard Class="mb-4">
-        <MudCardHeader>
-            <CardHeaderContent>
-                <MudText Typo="Typo.h5">Route Map</MudText>
-            </CardHeaderContent>
-        </MudCardHeader>
-        <MudCardContent>
-            <div id="map" style="height: 400px; width: 100%; border-radius: 4px;"></div>
-        </MudCardContent>
-    </MudCard>
+    @* Map section - only show if GPS data available *@
+    @if (activity.TrackCoordinates != null && activity.TrackCoordinates.Any())
+    {
+        <MudCard Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h5">Route Map</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <div id="map" style="height: 400px; width: 100%; border-radius: 4px;"></div>
+            </MudCardContent>
+        </MudCard>
+    }
 
-    @if (activity.TrackData != null && activity.TrackData.Any(p => p[2] != null))
+    @* Show heart rate stats for activities without GPS data *@
+    @if ((activity.TrackCoordinates == null || !activity.TrackCoordinates.Any()) && 
+         (activity.AverageHeartRate.HasValue || activity.MaxHeartRate.HasValue || activity.Calories.HasValue))
+    {
+        <MudGrid Class="mb-4">
+            @if (activity.AverageHeartRate.HasValue || activity.MaxHeartRate.HasValue)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudPaper Class="pa-3 text-center" Elevation="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Favorite" Size="Size.Large" Color="Color.Error" />
+                        <MudText Typo="Typo.h6" Class="mt-2">Heart Rate</MudText>
+                        @if (activity.AverageHeartRate.HasValue)
+                        {
+                            <MudText Typo="Typo.body1">Avg: @activity.AverageHeartRate.Value.ToString("F0") bpm</MudText>
+                        }
+                        @if (activity.MaxHeartRate.HasValue)
+                        {
+                            <MudText Typo="Typo.body1">Max: @activity.MaxHeartRate.Value.ToString("F0") bpm</MudText>
+                        }
+                        @if (activity.TrackData != null && activity.TrackData.Any(p => p[3] != null))
+                        {
+                            var minHR = activity.TrackData.Where(p => p[3] != null).Min(p => p[3]!.Value);
+                            <MudText Typo="Typo.body1">Min: @minHR.ToString("F0") bpm</MudText>
+                        }
+                    </MudPaper>
+                </MudItem>
+            }
+            @if (activity.Calories.HasValue)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudPaper Class="pa-3 text-center" Elevation="2">
+                        <MudIcon Icon="@Icons.Material.Filled.LocalFireDepartment" Size="Size.Large" Color="Color.Warning" />
+                        <MudText Typo="Typo.h6" Class="mt-2">Calories</MudText>
+                        <MudText Typo="Typo.h4">@activity.Calories.Value.ToString("F0")</MudText>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+
+    @* Elevation chart - only for activities with GPS + elevation data *@
+    @if (activity.TrackCoordinates != null && activity.TrackCoordinates.Any() && 
+         activity.TrackData != null && activity.TrackData.Any(p => p[2] != null))
     {
         <MudCard Class="mb-4">
             <MudCardHeader>
@@ -89,7 +135,9 @@ else
         </MudCard>
     }
 
-    @if (activity.TrackData?.Any(p => p.Length > 4 && p[4] != null) == true)
+    @* Pace chart - only for activities with GPS + timestamps *@
+    @if (activity.TrackCoordinates != null && activity.TrackCoordinates.Any() && 
+         activity.TrackData?.Any(p => p.Length > 4 && p[4] != null) == true)
     {
         <MudCard Class="mb-4">
             <MudCardHeader>
@@ -105,6 +153,7 @@ else
         </MudCard>
     }
 
+    @* Heart rate chart - show for all activities with HR data *@
     @if (activity.TrackData != null && activity.TrackData.Any(p => p[3] != null))
     {
         <MudCard Class="mb-4">
@@ -121,7 +170,9 @@ else
         </MudCard>
     }
 
-    @if (activity.TrackData?.Any(p => p.Length > 5 && p[5] != null) == true)
+    @* Cadence chart - only for activities with GPS + cadence data *@
+    @if (activity.TrackCoordinates != null && activity.TrackCoordinates.Any() && 
+         activity.TrackData?.Any(p => p.Length > 5 && p[5] != null) == true)
     {
         <MudCard Class="mb-4">
             <MudCardHeader>
@@ -135,6 +186,15 @@ else
                 </div>
             </MudCardContent>
         </MudCard>
+    }
+
+    @* No data message - when neither GPS nor HR data available *@
+    @if ((activity.TrackCoordinates == null || !activity.TrackCoordinates.Any()) && 
+         (activity.TrackData == null || !activity.TrackData.Any(p => p[3] != null)))
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4">
+            No GPS or heart rate data available for this activity.
+        </MudAlert>
     }
 
     <MudGrid>
@@ -241,6 +301,9 @@ else
 
     private ActivityViewModel? activity;
     private string? errorMessage;
+    private webapp.Services.ActivityApiClient.SportStatisticsDto? sportStats;
+    private bool _initialized = false;
+    private Guid _loadedId;
 
     private async Task OpenEditDialog()
     {
@@ -298,13 +361,26 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        _loadedId = Id;
         await LoadActivityAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId != Id)
+        {
+            _initialized = false;
+            activity = null;
+            _loadedId = Id;
+            await LoadActivityAsync();
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && activity != null)
+        if (activity != null && !_initialized)
         {
+            _initialized = true;
             await InitializeMap();
             if (activity.TrackData != null && activity.TrackData.Any())
             {
@@ -357,8 +433,14 @@ else
             MaxSpeedMs = storedActivity.MaxSpeedMs,
             TrackPoints = storedActivity.TrackPoints,
             TrackCoordinates = storedActivity.TrackCoordinates,
-            TrackData = storedActivity.TrackData
+            TrackData = storedActivity.TrackData,
+            AverageHeartRate = storedActivity.AverageHeartRate,
+            MaxHeartRate = storedActivity.MaxHeartRate,
+            Calories = storedActivity.Calories
         };
+
+        // Load sport statistics for comparison
+        await LoadSportStatisticsAsync();
     }
 
     private async Task InitializeMap()
@@ -374,6 +456,22 @@ else
         {
             // Map initialization failed - could show a fallback message
             Console.WriteLine($"Map initialization failed: {ex.Message}");
+        }
+    }
+
+    private async Task LoadSportStatisticsAsync()
+    {
+        if (activity == null) return;
+
+        try
+        {
+            var allStats = await ActivityApiClient.GetStatisticsBySportAsync();
+            sportStats = allStats.FirstOrDefault(s => s.SportName == activity.ActivityType);
+        }
+        catch (Exception ex)
+        {
+            // Failed to load sport statistics - non-critical, just skip comparison
+            Console.WriteLine($"Failed to load sport statistics: {ex.Message}");
         }
     }
 
@@ -418,10 +516,14 @@ else
         public int TrackPoints { get; set; }
         public List<double[]>? TrackCoordinates { get; set; }
         public List<double?[]>? TrackData { get; set; }
+        public double? AverageHeartRate { get; set; }
+        public double? MaxHeartRate { get; set; }
+        public double? Calories { get; set; }
     }
 
     public async ValueTask DisposeAsync()
     {
+        _initialized = false;
         try { await JSRuntime.InvokeVoidAsync("destroyActivityCharts"); }
         catch { }
     }
