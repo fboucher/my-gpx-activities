@@ -290,21 +290,25 @@ public class ActivityRepository : IActivityRepository
         var currentYearWeek = (now.Year * 100) + (int)System.Globalization.ISOWeek.GetWeekOfYear(now);
         var currentStreak = streaks.FirstOrDefault(s => s.Last_Week >= currentYearWeek - 1);
         var currentWeekStreak = currentStreak?.Streak_Length ?? 0;
-        var activityDaysByWeek = await connection.QueryAsync<DayActivityCount>("""
+        var activityDaysByWeekDtos = await connection.QueryAsync<DayActivityCountDto>("""
             SELECT EXTRACT(WEEK FROM start_date_time)::int as week_number, EXTRACT(YEAR FROM start_date_time)::int as year, COUNT(DISTINCT DATE(start_date_time)) as days_with_activities
             FROM activities WHERE start_date_time >= NOW() - INTERVAL '12 weeks' GROUP BY year, week_number ORDER BY year DESC, week_number DESC
             """);
-        var activityDaysByMonth = await connection.QueryAsync<MonthActivityCount>("""
+        var activityDaysByMonthDtos = await connection.QueryAsync<MonthActivityCountDto>("""
             SELECT EXTRACT(MONTH FROM start_date_time)::int as month, EXTRACT(YEAR FROM start_date_time)::int as year, COUNT(DISTINCT DATE(start_date_time)) as days_with_activities
             FROM activities WHERE start_date_time >= NOW() - INTERVAL '12 months' GROUP BY year, month ORDER BY year DESC, month DESC
             """);
-        var yearRecap = await connection.QueryAsync<YearSummary>("""
+        var yearRecapDtos = await connection.QueryAsync<YearSummaryDto>("""
             SELECT EXTRACT(YEAR FROM start_date_time)::int as year, COUNT(*)::int as total_activities, (SUM(distance_meters) / 1000.0) as total_distance_km,
             (SUM(EXTRACT(EPOCH FROM (end_date_time - start_date_time))) / 60.0) as total_duration_minutes FROM activities GROUP BY year ORDER BY year DESC
             """);
-        var sportCounts = await connection.QueryAsync<SportCount>("""
+        var sportCountDtos = await connection.QueryAsync<SportCountDto>("""
             SELECT activity_type as sport_type, COUNT(*)::int as count FROM activities GROUP BY activity_type ORDER BY count DESC
             """);
+        var activityDaysByWeek = activityDaysByWeekDtos.Select(d => new DayActivityCount(d.Week_Number, d.Year, d.Days_With_Activities));
+        var activityDaysByMonth = activityDaysByMonthDtos.Select(d => new MonthActivityCount(d.Month, d.Year, d.Days_With_Activities));
+        var yearRecap = yearRecapDtos.Select(d => new YearSummary(d.Year, d.Total_Activities, d.Total_Distance_Km, d.Total_Duration_Minutes));
+        var sportCounts = sportCountDtos.Select(d => new SportCount(d.Sport_Type, d.Count));
         return new GlobalStatistics(currentWeekStreak, longestStreak, activityDaysByWeek, activityDaysByMonth, yearRecap, sportCounts);
     }
 
@@ -375,5 +379,33 @@ public class ActivityRepository : IActivityRepository
         public int First_Week { get; set; }
         public int Last_Week { get; set; }
         public int Streak_Length { get; set; }
+    }
+
+    private class DayActivityCountDto
+    {
+        public int Week_Number { get; set; }
+        public int Year { get; set; }
+        public int Days_With_Activities { get; set; }
+    }
+
+    private class MonthActivityCountDto
+    {
+        public int Month { get; set; }
+        public int Year { get; set; }
+        public int Days_With_Activities { get; set; }
+    }
+
+    private class YearSummaryDto
+    {
+        public int Year { get; set; }
+        public int Total_Activities { get; set; }
+        public double Total_Distance_Km { get; set; }
+        public double Total_Duration_Minutes { get; set; }
+    }
+
+    private class SportCountDto
+    {
+        public string Sport_Type { get; set; } = string.Empty;
+        public int Count { get; set; }
     }
 }
