@@ -51,61 +51,115 @@ app.MapGet("/api/activity-types", async (IActivityTypeRepository repository) =>
 })
 .WithName("GetActivityTypes");
 
-app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserService gpxParser, IActivityRepository activityRepository) =>
+app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserService gpxParser, IFitParserService fitParser, IActivityRepository activityRepository) =>
 {
     try
     {
         var form = await request.ReadFormAsync();
-        var file = form.Files.GetFile("gpx");
+        var file = form.Files.GetFile("file");
 
         if (file == null || file.Length == 0)
         {
-            return Results.BadRequest("No GPX file provided");
+            return Results.BadRequest("No file provided");
         }
 
-        if (!file.FileName.EndsWith(".gpx", StringComparison.OrdinalIgnoreCase))
+        var isGpx = file.FileName.EndsWith(".gpx", StringComparison.OrdinalIgnoreCase);
+        var isFit = file.FileName.EndsWith(".fit", StringComparison.OrdinalIgnoreCase);
+
+        if (!isGpx && !isFit)
         {
-            return Results.BadRequest("File must be a GPX file");
+            return Results.BadRequest("File must be a .gpx or .fit file");
         }
 
-        await using var stream = file.OpenReadStream();
-        var activityData = await gpxParser.ParseGpxAsync(stream);
+        Activity? activity;
 
-        var trackCoordinates = activityData.TrackPoints
-            .Select(tp => new[] { tp.Latitude, tp.Longitude })
-            .ToList();
+        if (isGpx)
+        {
+            await using var stream = file.OpenReadStream();
+            var activityData = await gpxParser.ParseGpxAsync(stream);
 
-        var trackData = activityData.TrackPoints
-            .Select(tp => new double?[]
+            var trackCoordinates = activityData.TrackPoints
+                .Select(tp => new[] { tp.Latitude, tp.Longitude })
+                .ToList();
+
+            var trackData = activityData.TrackPoints
+                .Select(tp => new double?[]
+                {
+                    tp.Latitude,
+                    tp.Longitude,
+                    tp.Elevation,
+                    tp.HeartRate,
+                    tp.Time.HasValue ? (double?)new DateTimeOffset(tp.Time.Value).ToUnixTimeMilliseconds() : null,
+                    tp.Cadence
+                })
+                .ToList();
+
+            activity = new Activity
             {
-                tp.Latitude,
-                tp.Longitude,
-                tp.Elevation,
-                tp.HeartRate,
-                tp.Time.HasValue ? (double?)new DateTimeOffset(tp.Time.Value).ToUnixTimeMilliseconds() : null,
-                tp.Cadence
-            })
-            .ToList();
+                Id = Guid.NewGuid(),
+                Title = activityData.Title,
+                StartDateTime = activityData.StartDateTime,
+                EndDateTime = activityData.EndDateTime,
+                ActivityType = activityData.ActivityType,
+                DistanceMeters = activityData.DistanceMeters,
+                ElevationGainMeters = activityData.ElevationGainMeters,
+                ElevationLossMeters = activityData.ElevationLossMeters,
+                AverageSpeedMs = activityData.AverageSpeedMs,
+                MaxSpeedMs = activityData.MaxSpeedMs,
+                TrackPointCount = activityData.TrackPoints.Count,
+                TrackCoordinatesJson = JsonSerializer.Serialize(trackCoordinates),
+                TrackDataJson = JsonSerializer.Serialize(trackData),
+                CreatedAt = DateTime.UtcNow
+            };
 
-        var activity = new Activity
+            await activityRepository.CreateActivityAsync(activity);
+        }
+        else // FIT
         {
-            Id = Guid.NewGuid(),
-            Title = activityData.Title,
-            StartDateTime = activityData.StartDateTime,
-            EndDateTime = activityData.EndDateTime,
-            ActivityType = activityData.ActivityType,
-            DistanceMeters = activityData.DistanceMeters,
-            ElevationGainMeters = activityData.ElevationGainMeters,
-            ElevationLossMeters = activityData.ElevationLossMeters,
-            AverageSpeedMs = activityData.AverageSpeedMs,
-            MaxSpeedMs = activityData.MaxSpeedMs,
-            TrackPointCount = activityData.TrackPoints.Count,
-            TrackCoordinatesJson = JsonSerializer.Serialize(trackCoordinates),
-            TrackDataJson = JsonSerializer.Serialize(trackData),
-            CreatedAt = DateTime.UtcNow
-        };
+            await using var stream = file.OpenReadStream();
+            var fitPoints = await fitParser.ParseFitAsync(stream);
 
-        await activityRepository.CreateActivityAsync(activity);
+            var trackCoordinates = fitPoints
+                .Where(p => p.Latitude.HasValue && p.Longitude.HasValue)
+                .Select(p => new[] { p.Latitude!.Value, p.Longitude!.Value })
+                .ToList();
+
+            var trackData = fitPoints
+                .Select(p => new double?[]
+                {
+                    p.Latitude,
+                    p.Longitude,
+                    p.Elevation,
+                    p.HeartRate,
+                    (double?)new DateTimeOffset(p.Timestamp).ToUnixTimeMilliseconds(),
+                    p.Cadence
+                })
+                .ToList();
+
+            var first = fitPoints.First();
+            var last = fitPoints.Last();
+            var title = Path.GetFileNameWithoutExtension(file.FileName);
+
+            activity = new Activity
+            {
+                Id = Guid.NewGuid(),
+                Title = title,
+                StartDateTime = first.Timestamp,
+                EndDateTime = last.Timestamp,
+                ActivityType = "Unknown",
+                DistanceMeters = 0,
+                ElevationGainMeters = 0,
+                ElevationLossMeters = 0,
+                AverageSpeedMs = 0,
+                MaxSpeedMs = 0,
+                TrackPointCount = fitPoints.Count,
+                TrackCoordinatesJson = JsonSerializer.Serialize(trackCoordinates),
+                TrackDataJson = JsonSerializer.Serialize(trackData),
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await activityRepository.CreateActivityAsync(activity);
+        }
 
         var response = new
         {
@@ -120,31 +174,29 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
             activity.AverageSpeedMs,
             activity.MaxSpeedMs,
             TrackPoints = activity.TrackPointCount,
-            activity.CreatedAt,
-            TrackCoordinates = trackCoordinates,
-            TrackData = trackData
+            activity.CreatedAt
         };
 
         return Results.Created($"/api/activities/{activity.Id}", response);
     }
     catch (Exception ex)
     {
-        app.Logger.LogError(ex, "Error processing GPX file during import");
-        return Results.Problem("An error occurred while processing the GPX file. Please try again.");
+        app.Logger.LogError(ex, "Error processing file during import");
+        return Results.Problem("An error occurred while processing the file. Please try again.");
     }
 })
 .WithName("ImportGpxActivity");
 
-app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxParserService gpxParser, IActivityRepository activityRepository) =>
+app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxParserService gpxParser, IFitParserService fitParser, IActivityRepository activityRepository) =>
 {
     try
     {
         var form = await request.ReadFormAsync();
-        var files = form.Files.GetFiles("gpx");
+        var files = form.Files.GetFiles("file");
 
         if (files == null || files.Count == 0)
         {
-            return Results.BadRequest("No GPX files provided");
+            return Results.BadRequest("No files provided");
         }
 
         var results = new List<object>();
@@ -160,46 +212,100 @@ app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxPars
 
             try
             {
-                if (!file.FileName.EndsWith(".gpx", StringComparison.OrdinalIgnoreCase))
+                var isGpx = file.FileName.EndsWith(".gpx", StringComparison.OrdinalIgnoreCase);
+                var isFit = file.FileName.EndsWith(".fit", StringComparison.OrdinalIgnoreCase);
+
+                if (!isGpx && !isFit)
                 {
-                    return result with { ErrorMessage = "File must be a GPX file" };
+                    return result with { ErrorMessage = "File must be a .gpx or .fit file" };
                 }
 
                 await using var stream = file.OpenReadStream();
-                var activityData = await gpxParser.ParseGpxAsync(stream);
 
-                var trackCoordinates = activityData.TrackPoints
-                    .Select(tp => new[] { tp.Latitude, tp.Longitude })
-                    .ToList();
+                List<double[]>? trackCoordinates;
+                List<double?[]>? trackData;
+                Activity? activity;
 
-                var trackData = activityData.TrackPoints
-                    .Select(tp => new double?[]
-                    {
-                        tp.Latitude,
-                        tp.Longitude,
-                        tp.Elevation,
-                        tp.HeartRate,
-                        tp.Time.HasValue ? (double?)new DateTimeOffset(tp.Time.Value).ToUnixTimeMilliseconds() : null
-                    })
-                    .ToList();
-
-                var activity = new Activity
+                if (isGpx)
                 {
-                    Id = Guid.NewGuid(),
-                    Title = activityData.Title,
-                    StartDateTime = activityData.StartDateTime,
-                    EndDateTime = activityData.EndDateTime,
-                    ActivityType = activityData.ActivityType,
-                    DistanceMeters = activityData.DistanceMeters,
-                    ElevationGainMeters = activityData.ElevationGainMeters,
-                    ElevationLossMeters = activityData.ElevationLossMeters,
-                    AverageSpeedMs = activityData.AverageSpeedMs,
-                    MaxSpeedMs = activityData.MaxSpeedMs,
-                    TrackPointCount = activityData.TrackPoints.Count,
-                    TrackCoordinatesJson = JsonSerializer.Serialize(trackCoordinates),
-                    TrackDataJson = JsonSerializer.Serialize(trackData),
-                    CreatedAt = DateTime.UtcNow
-                };
+                    var activityData = await gpxParser.ParseGpxAsync(stream);
+
+                    trackCoordinates = activityData.TrackPoints
+                        .Select(tp => new[] { tp.Latitude, tp.Longitude })
+                        .ToList();
+
+                    trackData = activityData.TrackPoints
+                        .Select(tp => new double?[]
+                        {
+                            tp.Latitude,
+                            tp.Longitude,
+                            tp.Elevation,
+                            tp.HeartRate,
+                            tp.Time.HasValue ? (double?)new DateTimeOffset(tp.Time.Value).ToUnixTimeMilliseconds() : null
+                        })
+                        .ToList();
+
+                    activity = new Activity
+                    {
+                        Id = Guid.NewGuid(),
+                        Title = activityData.Title,
+                        StartDateTime = activityData.StartDateTime,
+                        EndDateTime = activityData.EndDateTime,
+                        ActivityType = activityData.ActivityType,
+                        DistanceMeters = activityData.DistanceMeters,
+                        ElevationGainMeters = activityData.ElevationGainMeters,
+                        ElevationLossMeters = activityData.ElevationLossMeters,
+                        AverageSpeedMs = activityData.AverageSpeedMs,
+                        MaxSpeedMs = activityData.MaxSpeedMs,
+                        TrackPointCount = activityData.TrackPoints.Count,
+                        TrackCoordinatesJson = JsonSerializer.Serialize(trackCoordinates),
+                        TrackDataJson = JsonSerializer.Serialize(trackData),
+                        CreatedAt = DateTime.UtcNow
+                    };
+                }
+                else // FIT
+                {
+                    var fitPoints = await fitParser.ParseFitAsync(stream);
+
+                    trackCoordinates = fitPoints
+                        .Where(p => p.Latitude.HasValue && p.Longitude.HasValue)
+                        .Select(p => new[] { p.Latitude!.Value, p.Longitude!.Value })
+                        .ToList();
+
+                    trackData = fitPoints
+                        .Select(p => new double?[]
+                        {
+                            p.Latitude,
+                            p.Longitude,
+                            p.Elevation,
+                            p.HeartRate,
+                            (double?)new DateTimeOffset(p.Timestamp).ToUnixTimeMilliseconds(),
+                            p.Cadence
+                        })
+                        .ToList();
+
+                    var first = fitPoints.First();
+                    var last = fitPoints.Last();
+                    var title = Path.GetFileNameWithoutExtension(file.FileName);
+
+                    activity = new Activity
+                    {
+                        Id = Guid.NewGuid(),
+                        Title = title,
+                        StartDateTime = first.Timestamp,
+                        EndDateTime = last.Timestamp,
+                        ActivityType = "Unknown",
+                        DistanceMeters = 0,
+                        ElevationGainMeters = 0,
+                        ElevationLossMeters = 0,
+                        AverageSpeedMs = 0,
+                        MaxSpeedMs = 0,
+                        TrackPointCount = fitPoints.Count,
+                        TrackCoordinatesJson = JsonSerializer.Serialize(trackCoordinates),
+                        TrackDataJson = JsonSerializer.Serialize(trackData),
+                        CreatedAt = DateTime.UtcNow
+                    };
+                }
 
                 await activityRepository.CreateActivityAsync(activity);
 
@@ -251,7 +357,7 @@ app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxPars
     }
 })
 .WithName("BatchImportGpxActivities")
-.WithDescription("Import multiple GPX files in a single request");
+.WithDescription("Import multiple GPX or FIT files in a single request");
 
 app.MapPost("/api/activities/smart-merge", async (HttpRequest request, ISmartMergeService smartMerge) =>
 {

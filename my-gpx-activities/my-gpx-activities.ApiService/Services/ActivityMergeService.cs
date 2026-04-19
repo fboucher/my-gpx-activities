@@ -70,7 +70,7 @@ public class ActivityMergeService(IActivityRepository repository, ILogger<Activi
         }
         else
         {
-            (mergedPoints, baseActivity) = BuildMerge(actA, actB, pointsA, pointsB);
+            (mergedPoints, baseActivity) = BuildMerge(actA, actB, pointsA, pointsB, request.ChannelSources);
         }
 
         var trackCoordinates = mergedPoints
@@ -135,20 +135,32 @@ public class ActivityMergeService(IActivityRepository repository, ILogger<Activi
 
     private static (List<double?[]> points, Activity stats) BuildMerge(
         Activity actA, Activity actB,
-        List<double?[]> pointsA, List<double?[]> pointsB)
+        List<double?[]> pointsA, List<double?[]> pointsB,
+        Dictionary<string, string>? userChannelSources)
     {
-        // For each channel, pick the source with more non-null values
-        var channelSources = ChannelDefs
-            .Select(c => (c.Index, Source: CountChannel(pointsA, c.Index) >= CountChannel(pointsB, c.Index) ? pointsA : pointsB))
-            .ToDictionary(x => x.Index, x => x.Source);
+        var channelNameToIndex = ChannelDefs.ToDictionary(c => c.Name, c => c.Index);
+
+        var channelSources = new Dictionary<int, List<double?[]>>();
+
+        foreach (var def in ChannelDefs)
+        {
+            List<double?[]> source;
+            if (userChannelSources != null && userChannelSources.TryGetValue(def.Name, out var userChoice))
+            {
+                source = userChoice.ToUpperInvariant() == "B" ? pointsB : pointsA;
+            }
+            else
+            {
+                source = CountChannel(pointsA, def.Index) >= CountChannel(pointsB, def.Index) ? pointsA : pointsB;
+            }
+            channelSources[def.Index] = source;
+        }
 
         // GPS uses both indices 0 and 1 — decide once based on index 0
         var gpsSource = channelSources[0];
 
         // Use the GPS-source activity as the "spine" — its point count drives the result length
         var spinePoints = gpsSource;
-        var otherPoints = gpsSource == pointsA ? pointsB : pointsA;
-        _ = otherPoints; // not used for spine iteration
 
         // Build merged point list: one entry per spine point, filling each channel from its preferred source
         var merged = new List<double?[]>(spinePoints.Count);
