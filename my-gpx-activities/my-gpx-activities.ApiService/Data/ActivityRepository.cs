@@ -6,10 +6,12 @@ namespace my_gpx_activities.ApiService.Data;
 public class ActivityRepository : IActivityRepository
 {
     private readonly IDatabaseConnectionFactory _connectionFactory;
+    private readonly IActivityTypeRepository _activityTypeRepository;
 
-    public ActivityRepository(IDatabaseConnectionFactory connectionFactory)
+    public ActivityRepository(IDatabaseConnectionFactory connectionFactory, IActivityTypeRepository activityTypeRepository)
     {
         _connectionFactory = connectionFactory;
+        _activityTypeRepository = activityTypeRepository;
     }
 
     public async Task<IEnumerable<Activity>> GetAllActivitiesAsync()
@@ -167,20 +169,49 @@ public class ActivityRepository : IActivityRepository
     {
         await using var connection = await _connectionFactory.CreateConnectionAsync();
 
-        var existing = await GetActivityByIdAsync(id);
-        if (existing == null) return null;
+        if (activityType != null)
+        {
+            var existingType = await _activityTypeRepository.GetActivityTypeByNameAsync(activityType);
+            if (existingType == null)
+            {
+                await _activityTypeRepository.CreateActivityTypeAsync(new ApiService.Models.ActivityType
+                {
+                    Name = activityType,
+                    Icon = "directions_run",
+                    Color = "#888888",
+                    IsDefault = false
+                });
+            }
+        }
 
-        if (title != null) existing.Title = title;
-        if (activityType != null) existing.ActivityType = activityType;
+        if (title == null && activityType == null) return null;
 
-        await connection.ExecuteAsync("""
+        var titleValue = title;
+        var activityTypeValue = activityType;
+
+        var updated = await connection.QuerySingleOrDefaultAsync<ActivityDto>("""
             UPDATE activities SET
-                title = @Title,
-                activity_type = @ActivityType
+                title = COALESCE(NULLIF(@Title, ''), title),
+                activity_type = COALESCE(NULLIF(@ActivityType, ''), activity_type)
             WHERE id = @Id
-            """, new { existing.Id, existing.Title, existing.ActivityType });
+            RETURNING 
+                id,
+                title,
+                start_date_time,
+                end_date_time,
+                activity_type,
+                distance_meters,
+                elevation_gain_meters,
+                elevation_loss_meters,
+                average_speed_ms,
+                max_speed_ms,
+                track_point_count,
+                track_coordinates_json,
+                track_data_json,
+                created_at
+            """, new { Id = id, Title = titleValue, ActivityType = activityTypeValue });
 
-        return existing;
+        return updated != null ? MapToActivity(updated) : null;
     }
 
     public async Task<bool> DeleteActivityAsync(Guid id)

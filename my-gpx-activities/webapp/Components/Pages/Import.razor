@@ -1,18 +1,18 @@
 @page "/import"
 
-<PageTitle>Import GPX Files</PageTitle>
+<PageTitle>Import Activity Files</PageTitle>
 
-<MudText Typo="Typo.h3" GutterBottom="true">Import GPX Files</MudText>
+<MudText Typo="Typo.h3" GutterBottom="true">Import Activity Files</MudText>
 
 <MudText Class="mb-4">
-    Upload your GPX files to analyze your GPS activities. You can view routes on interactive maps and examine detailed analytics.
+    Upload your GPX or FIT files to analyze your GPS activities. You can view routes on interactive maps and examine detailed analytics.
 </MudText>
 
 <MudCard Class="pa-4">
     <MudCardContent>
         <MudFileUpload T="IReadOnlyList<IBrowserFile>"
                        FilesChanged="HandleFilesChanged"
-                       Accept=".gpx"
+                       Accept=".gpx,.fit"
                        MaximumFileCount="10"
                        Class="mb-4">
             <ActivatorContent>
@@ -20,7 +20,7 @@
                           Color="Color.Primary"
                           StartIcon="@Icons.Material.Filled.CloudUpload"
                           Size="Size.Large">
-                    Choose GPX Files
+                    Choose Files
                 </MudButton>
             </ActivatorContent>
             <SelectedTemplate>
@@ -322,9 +322,9 @@
                     throw new Exception($"File {file.Name} is too large. Maximum size is 10MB.");
                 }
 
-                if (!file.Name.EndsWith(".gpx", StringComparison.OrdinalIgnoreCase))
+                if (!file.Name.EndsWith(".gpx", StringComparison.OrdinalIgnoreCase) && !file.Name.EndsWith(".fit", StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new Exception($"File {file.Name} is not a valid GPX file.");
+                    throw new Exception($"File {file.Name} is not a valid GPX or FIT file.");
                 }
             }
 
@@ -368,7 +368,7 @@
             // Add the file content from memory
             var fileContent = new ByteArrayContent(memoryStream.ToArray());
             fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-            content.Add(fileContent, "gpx", file.Name);
+            content.Add(fileContent, "file", file.Name);
         }
 
         var response = await client.PostAsync("api/activities/import/batch", content);
@@ -415,7 +415,7 @@
         using var content = new MultipartFormDataContent();
         using var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024));
         fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-        content.Add(fileContent, "gpx", file.Name);
+        content.Add(fileContent, "file", file.Name);
 
         var response = await client.PostAsync("api/activities/import", content);
 

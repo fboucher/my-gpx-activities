@@ -5,5 +5,6 @@ public record MergeRequest(
     Guid ActivityBId,
     string Mode,
     string SportType,
-    string Name
+    string Name,
+    Dictionary<string, string>? ChannelSources = null
 );

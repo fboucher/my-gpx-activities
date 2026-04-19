@@ -101,6 +101,27 @@
                                       Placeholder="Enter a name for the merged activity"
                                       Style="max-width: 500px;" />
 
+                        @* Channel source selection (merge mode only) *@
+                        @if (selectedMode == "merge" && preview != null)
+                        {
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.subtitle2">Data Source per Channel</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Select which activity to use as the source for each data type.
+                                </MudText>
+                                @foreach (var ch in GetAllChannels())
+                                {
+                                    <MudElement HtmlTag="div" Class="d-flex align-center gap-4">
+                                        <MudText Style="min-width: 100px;">@ch</MudText>
+                                        <MudRadioGroup T="string" @bind-Value="@channelSources[ch]">
+                                            <MudRadio Value="@("A")" Color="Color.Primary">A</MudRadio>
+                                            <MudRadio Value="@("B")" Color="Color.Secondary">B</MudRadio>
+                                        </MudRadioGroup>
+                                    </MudElement>
+                                }
+                            </MudStack>
+                        }
+
                         @if (mergeError != null)
                         {
                             <MudAlert Severity="Severity.Error">@mergeError</MudAlert>
@@ -156,6 +177,16 @@
     private string selectedMode = "merge";
     private string selectedSportType = string.Empty;
     private string activityName = string.Empty;
+    private Dictionary<string, string> channelSources = new();
+
+    private string[] GetAllChannels() =>
+    ["gps", "elevation", "heart_rate", "timestamp", "cadence"];
+
+    private static string[] ChannelDefaults(string[] channelsA, string[] channelsB)
+    {
+        var all = new HashSet<string>(channelsA.Concat(channelsB));
+        return all.ToArray();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -176,6 +207,16 @@
             selectedMode = preview.SuggestedMode.ToLowerInvariant();
             selectedSportType = preview.ActivityASportType;
             activityName = preview.SuggestedName;
+
+            var defaultSources = new Dictionary<string, string>();
+            var allChannels = GetAllChannels();
+            foreach (var ch in allChannels)
+            {
+                bool aHas = preview.ActivityAChannels.Contains(ch);
+                bool bHas = preview.ActivityBChannels.Contains(ch);
+                defaultSources[ch] = aHas ? "A" : (bHas ? "B" : "A");
+            }
+            channelSources = defaultSources;
         }
 
         isLoading = false;
@@ -188,12 +229,19 @@
         isMerging = true;
         mergeError = null;
 
+        Dictionary<string, string>? channelSourcesToSend = null;
+        if (selectedMode == "merge")
+        {
+            channelSourcesToSend = new Dictionary<string, string>(channelSources);
+        }
+
         var request = new ActivityApiClient.MergeRequest(
             ActivityAId,
             ActivityBId,
             selectedMode,
             selectedSportType,
-            activityName);
+            activityName,
+            channelSourcesToSend);
 
         var newId = await ActivityApiClient.MergeActivitiesAsync(request);
 

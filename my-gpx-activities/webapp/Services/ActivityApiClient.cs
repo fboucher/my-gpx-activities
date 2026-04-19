@@ -18,7 +18,7 @@ public class ActivityApiClient(IHttpClientFactory httpClientFactory)
         string ActivityASportType,
         string ActivityBSportType);
 
-    public record MergeRequest(Guid ActivityAId, Guid ActivityBId, string Mode, string SportType, string Name);
+    public record MergeRequest(Guid ActivityAId, Guid ActivityBId, string Mode, string SportType, string Name, Dictionary<string, string>? ChannelSources = null);
 
     public record SportStatisticsDto(
         string SportName,
