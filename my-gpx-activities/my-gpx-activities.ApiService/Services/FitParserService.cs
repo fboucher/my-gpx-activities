@@ -1,6 +1,13 @@
 namespace my_gpx_activities.ApiService.Services;
 
-public record FitDataPoint(DateTime Timestamp, int? HeartRate, int? Cadence);
+public record FitDataPoint(
+    DateTime Timestamp,
+    int? HeartRate,
+    int? Cadence,
+    double? Latitude = null,
+    double? Longitude = null,
+    double? Elevation = null,
+    string? Sport = null);
 
 public interface IFitParserService
 {
@@ -53,6 +60,7 @@ public class FitParserService : IFitParserService
                 {
                     int? heartRate = null;
                     int? cadence = null;
+                    double? lat = null, lon = null, elevation = null;
                     foreach (var field in compDef.Fields)
                     {
                         if (field.FieldDefNum == 253)
@@ -61,10 +69,25 @@ public class FitParserService : IFitParserService
                             heartRate = data[pos] != 0xFF ? data[pos] : null;
                         else if (field.FieldDefNum == 4 && field.Size == 1)
                             cadence = data[pos] != 0xFF ? data[pos] : null;
+                        else if (field.FieldDefNum == 0 && field.Size == 4)
+                        {
+                            var raw = BitConverter.ToInt32(data, pos);
+                            lat = raw != int.MinValue ? raw * (180.0 / 2147483648.0) : null;
+                        }
+                        else if (field.FieldDefNum == 1 && field.Size == 4)
+                        {
+                            var raw = BitConverter.ToInt32(data, pos);
+                            lon = raw != int.MinValue ? raw * (180.0 / 2147483648.0) : null;
+                        }
+                        else if (field.FieldDefNum == 2 && field.Size == 2)
+                        {
+                            var raw = BitConverter.ToUInt16(data, pos);
+                            elevation = raw != 0xFFFF ? raw * 0.5 : null;
+                        }
                         pos += field.Size;
                     }
                     var dt = FitEpoch.AddSeconds(timestamp);
-                    results.Add(new FitDataPoint(dt, heartRate, cadence));
+                    results.Add(new FitDataPoint(dt, heartRate, cadence, lat, lon, elevation));
                 }
                 else if (definitions.TryGetValue(localType, out var skipDef))
                 {
@@ -121,6 +144,9 @@ public class FitParserService : IFitParserService
                     uint? timestamp = null;
                     int? heartRate = null;
                     int? cadence = null;
+                    int? latSemi = null;
+                    int? lonSemi = null;
+                    double? elevation = null;
 
                     foreach (var field in def.Fields)
                     {
@@ -138,14 +164,33 @@ public class FitParserService : IFitParserService
                         {
                             cadence = data[pos] != 0xFF ? data[pos] : null;
                         }
+                        else if (field.FieldDefNum == 0 && field.Size == 4) // position_lat (semicircles)
+                        {
+                            var raw = BitConverter.ToInt32(data, pos);
+                            latSemi = raw != int.MinValue ? raw : null;
+                        }
+                        else if (field.FieldDefNum == 1 && field.Size == 4) // position_long (semicircles)
+                        {
+                            var raw = BitConverter.ToInt32(data, pos);
+                            lonSemi = raw != int.MinValue ? raw : null;
+                        }
+                        else if (field.FieldDefNum == 2 && field.Size == 2) // altitude (0.5m units)
+                        {
+                            var raw = BitConverter.ToUInt16(data, pos);
+                            elevation = raw != 0xFFFF ? raw * 0.5 : null;
+                        }
                         pos += field.Size;
                     }
+
+                    // Convert semicircles to degrees
+                    double? lat = latSemi.HasValue ? latSemi.Value * (180.0 / 2147483648.0) : null;
+                    double? lon = lonSemi.HasValue ? lonSemi.Value * (180.0 / 2147483648.0) : null;
 
                     if (timestamp.HasValue)
                     {
                         lastTimestamp = timestamp.Value;
                         var dt = FitEpoch.AddSeconds(timestamp.Value);
-                        results.Add(new FitDataPoint(dt, heartRate, cadence));
+                        results.Add(new FitDataPoint(dt, heartRate, cadence, lat, lon, elevation));
                     }
                 }
                 else
