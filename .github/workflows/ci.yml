@@ -82,6 +82,9 @@ jobs:
         run: dotnet build --no-restore --configuration Release
         working-directory: my-gpx-activities
 
+      - name: Trust ASP.NET Core dev certificate
+        run: dotnet dev-certs https --trust
+
       - name: Run integration tests
         run: dotnet test my-gpx-activities.Tests --configuration Release --filter "TestCategory=Integration" --logger "trx;LogFileName=integration-test-results.trx" --logger "console;verbosity=detailed"
         working-directory: my-gpx-activities
