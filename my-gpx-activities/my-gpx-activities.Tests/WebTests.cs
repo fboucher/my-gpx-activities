@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 
 namespace my_gpx_activities.Tests;
 
+[Category("Integration")]
 public class WebTests
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);

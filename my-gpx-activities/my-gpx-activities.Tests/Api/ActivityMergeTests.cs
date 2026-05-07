@@ -14,6 +14,7 @@ namespace my_gpx_activities.Tests.Api;
 /// Minor field name adjustments may be needed once the implementation is complete.
 /// </summary>
 [TestFixture]
+[Category("Integration")]
 public class ActivityMergeTests
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(60);

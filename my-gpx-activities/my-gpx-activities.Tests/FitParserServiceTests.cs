@@ -6,6 +6,7 @@ namespace my_gpx_activities.Tests;
 /// Unit tests for FitParserService — exercises FIT binary parsing without Aspire infrastructure.
 /// </summary>
 [TestFixture]
+[Category("Unit")]
 public class FitParserServiceTests
 {
     private FitParserService _service = null!;

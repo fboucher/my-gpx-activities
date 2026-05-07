@@ -10,6 +10,7 @@ namespace my_gpx_activities.Tests.Api;
 /// Tests Strava JSON import with and without streams, duplicate detection, and sport type mapping.
 /// </summary>
 [TestFixture]
+[Category("Integration")]
 public class StravaImportTests
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(60);
