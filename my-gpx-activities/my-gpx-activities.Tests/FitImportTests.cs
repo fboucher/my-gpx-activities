@@ -3,6 +3,7 @@ using my_gpx_activities.ApiService.Services;
 namespace my_gpx_activities.Tests;
 
 [TestFixture]
+[Category("Unit")]
 public class FitImportTests
 {
     private FitParserService _service = null!;

@@ -11,6 +11,7 @@ namespace my_gpx_activities.Tests.Api;
 /// Verifies that activities imported into the database are visible in the listing endpoint.
 /// </summary>
 [TestFixture]
+[Category("Integration")]
 public class ActivityListingTests
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(60);

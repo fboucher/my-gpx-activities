@@ -10,6 +10,7 @@ namespace my_gpx_activities.Tests;
 /// Returns array of HeatMapActivity { activityId, activityName, sportType, trackPoints: [[lat,lon],...] }
 /// </summary>
 [TestFixture]
+[Category("Integration")]
 public class HeatMapApiTests
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(60);

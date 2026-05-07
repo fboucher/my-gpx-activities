@@ -11,6 +11,7 @@ namespace my_gpx_activities.Tests;
 /// Returns merged GPX XML with heart-rate extensions in track points.
 /// </summary>
 [TestFixture]
+[Category("Integration")]
 public class SmartMergeApiTests
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(60);
