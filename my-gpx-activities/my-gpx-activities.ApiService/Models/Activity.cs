@@ -43,5 +43,7 @@ public class Activity
     public double? MaxHeartRate { get; set; }
     public double? Calories { get; set; }
 
+    public string? WeatherDataJson { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -100,4 +100,19 @@ public class ActivityApiClient(IHttpClientFactory httpClientFactory)
         var result = await _client.GetFromJsonAsync<List<SportStatisticsDto>>("/api/statistics/by-sport", cancellationToken);
         return result ?? [];
     }
+
+    public async Task<List<BestSegmentDto>> GetBestSegmentsAsync(Guid activityId, CancellationToken cancellationToken = default)
+    {
+        var result = await _client.GetFromJsonAsync<List<BestSegmentDto>>($"/api/activities/{activityId}/best-segments", cancellationToken);
+        return result ?? [];
+    }
+
+    public async Task<List<ActivityRecordDto>> GetRecordsAsync(string? activityType = null, CancellationToken cancellationToken = default)
+    {
+        var url = "/api/records";
+        if (!string.IsNullOrEmpty(activityType))
+            url += $"?activityType={Uri.EscapeDataString(activityType)}";
+        var result = await _client.GetFromJsonAsync<List<ActivityRecordDto>>(url, cancellationToken);
+        return result ?? [];
+    }
 }

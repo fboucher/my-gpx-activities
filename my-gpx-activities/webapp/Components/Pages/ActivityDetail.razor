@@ -28,6 +28,18 @@ else
                        OnClick="OpenEditDialog" />
     </MudStack>
 
+    @if (_newRecords != null && _newRecords.Count > 0)
+    {
+        <MudStack Row="true" Spacing="1" Class="mb-2">
+            @foreach (var record in _newRecords)
+            {
+                <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.EmojiEvents">
+                    New @FormatMetricName(record.Metric) @(record.Year.HasValue ? record.Year.Value.ToString() : "All-Time")
+                </MudChip>
+            }
+        </MudStack>
+    }
+
     <MudGrid Class="mb-4">
         <MudItem xs="12" sm="6" md="3">
             <MudPaper Class="pa-3 text-center" Elevation="2">
@@ -60,6 +72,21 @@ else
                 <MudText Typo="Typo.h4">@FormatSpeed(activity.AverageSpeedMs)</MudText>
             </MudPaper>
         </MudItem>
+
+        @if (activity.Weather != null)
+        {
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-3 text-center" Elevation="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Cloud" Size="Size.Large" Color="Color.Default" />
+                    <MudText Typo="Typo.h6" Class="mt-2">Weather</MudText>
+                    <MudText Typo="Typo.body2">@activity.Weather.ConditionText</MudText>
+                    <MudText Typo="Typo.body1">@activity.Weather.TemperatureCelsius.ToString("F0")°C</MudText>
+                    <MudText Typo="Typo.body2">@activity.Weather.WindSpeedKmh.ToString("F0") km/h @activity.Weather.WindDirectionText</MudText>
+                    <MudText Typo="Typo.body2">Humidity: @activity.Weather.HumidityPercent.ToString("F0")%</MudText>
+                    <MudText Typo="Typo.body2">Visibility: @activity.Weather.VisibilityKm.ToString("F1") km</MudText>
+                </MudPaper>
+            </MudItem>
+        }
     </MudGrid>
 
     @* Map section - only show if GPS data available *@
@@ -238,6 +265,42 @@ else
             </MudCard>
         </MudItem>
 
+        @if (_bestSegments.Count > 0)
+        {
+            <MudItem xs="12" md="6">
+                <MudCard>
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Best Segments</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudSimpleTable Dense="true" Hover="true">
+                            <thead>
+                                <tr>
+                                    <th>Distance</th>
+                                    <th>Time</th>
+                                    <th>Speed</th>
+                                    <th>Pace</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var seg in _bestSegments)
+                                {
+                                    <tr>
+                                        <td>@FormatSegmentDistance(seg.DistanceMeters)</td>
+                                        <td>@FormatSegmentDuration(seg.TotalTimeSeconds)</td>
+                                        <td>@FormatSpeed(seg.SpeedMs)</td>
+                                        <td>@FormatPace(seg.SpeedMs)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+
         <MudItem xs="12" md="6">
             <MudCard>
                 <MudCardHeader>
@@ -304,6 +367,8 @@ else
     private webapp.Services.ActivityApiClient.SportStatisticsDto? sportStats;
     private bool _initialized = false;
     private Guid _loadedId;
+    private List<BestSegmentDto> _bestSegments = new();
+    private List<ActivityRecordDto> _newRecords = new();
 
     private async Task OpenEditDialog()
     {
@@ -436,11 +501,74 @@ else
             TrackData = storedActivity.TrackData,
             AverageHeartRate = storedActivity.AverageHeartRate,
             MaxHeartRate = storedActivity.MaxHeartRate,
-            Calories = storedActivity.Calories
+            Calories = storedActivity.Calories,
+            Weather = storedActivity.Weather
         };
 
         // Load sport statistics for comparison
         await LoadSportStatisticsAsync();
+
+        // Load best segments
+        try
+        {
+            _bestSegments = (await ActivityApiClient.GetBestSegmentsAsync(activity.Id))
+                .OrderBy(s => s.DistanceMeters)
+                .Where(s => s.SpeedMs > 0)
+                .ToList();
+        }
+        catch
+        {
+            // Best segments not available (e.g., no GPS data)
+        }
+
+        // Detect new records by comparing with current records
+        try
+        {
+            var allRecords = await ActivityApiClient.GetRecordsAsync(activity.ActivityType);
+            var relevantMetrics = _newRecordCandidates.Select(m => m.Key).ToList();
+            _newRecords = allRecords
+                .Where(r => r.ActivityId == activity.Id.ToString() && relevantMetrics.Contains(r.Metric))
+                .ToList();
+        }
+        catch
+        {
+            // Records not available
+        }
+    }
+
+    private static readonly Dictionary<string, string> _newRecordCandidates = new()
+    {
+        ["MaxSpeed"] = "Max Speed",
+        ["Distance"] = "Distance",
+        ["Duration"] = "Duration",
+        ["ElevationGain"] = "Elevation Gain"
+    };
+
+    private string FormatMetricName(string metricKey)
+    {
+        return _newRecordCandidates.TryGetValue(metricKey, out var name) ? name : metricKey;
+    }
+
+    private string FormatSegmentDistance(int meters)
+    {
+        if (meters >= 1000)
+            return $"{meters / 1000} km";
+        return $"{meters} m";
+    }
+
+    private string FormatSegmentDuration(double seconds)
+    {
+        var ts = TimeSpan.FromSeconds(seconds);
+        return $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}";
+    }
+
+    private string FormatPace(double speedMs)
+    {
+        if (speedMs <= 0) return "-";
+        var paceMinPerKm = 1000.0 / (speedMs * 60.0);
+        var minutes = (int)paceMinPerKm;
+        var seconds = (int)((paceMinPerKm - minutes) * 60);
+        return $"{minutes}:{seconds:D2} /km";
     }
 
     private async Task InitializeMap()
@@ -519,6 +647,7 @@ else
         public double? AverageHeartRate { get; set; }
         public double? MaxHeartRate { get; set; }
         public double? Calories { get; set; }
+        public WeatherRecordDto? Weather { get; set; }
     }
 
     public async ValueTask DisposeAsync()
