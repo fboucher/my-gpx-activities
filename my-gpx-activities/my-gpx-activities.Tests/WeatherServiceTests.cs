@@ -223,7 +223,6 @@ public class WeatherServiceTests
         Assert.That(result, Is.Not.Null);
         Assert.That(result!.ConditionText, Is.EqualTo("Unknown"));
     }
-
     // ────────────────────────────────────────────────────────────────
     // Mock HTTP infrastructure
     // ────────────────────────────────────────────────────────────────

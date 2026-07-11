@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using my_gpx_activities.ApiService.Models;
 
 namespace my_gpx_activities.ApiService.Services;
@@ -9,7 +10,7 @@ public interface IWeatherService
     Task<WeatherRecord?> GetWeatherAsync(double latitude, double longitude, DateTime timestamp, CancellationToken cancellationToken = default);
 }
 
-public class OpenMeteoWeatherService(HttpClient httpClient) : IWeatherService
+public class OpenMeteoWeatherService(HttpClient httpClient, ILogger<OpenMeteoWeatherService>? logger = null) : IWeatherService
 {
     private static readonly Dictionary<int, string> WeatherCodes = new()
     {
@@ -57,14 +58,14 @@ public class OpenMeteoWeatherService(HttpClient httpClient) : IWeatherService
 
     public async Task<WeatherRecord?> GetWeatherAsync(double latitude, double longitude, DateTime timestamp, CancellationToken cancellationToken = default)
     {
+        var date = timestamp.ToString("yyyy-MM-dd");
         try
         {
-            var date = timestamp.ToString("yyyy-MM-dd");
             var url = $"https://archive-api.open-meteo.com/v1/archive?" +
                       $"latitude={latitude:F4}&longitude={longitude:F4}" +
                       $"&start_date={date}&end_date={date}" +
                       $"&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code,visibility" +
-                      $"&timezone=auto";
+                      $"&timezone=UTC";
 
             var response = await httpClient.GetFromJsonAsync<OpenMeteoResponse>(url, cancellationToken);
             if (response?.Hourly == null) return null;
@@ -101,8 +102,9 @@ public class OpenMeteoWeatherService(HttpClient httpClient) : IWeatherService
                 VisibilityKm = (response.Hourly.Visibility?[index] ?? 0) / 1000.0,
             };
         }
-        catch
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "Failed to fetch weather data from Open-Meteo for latitude={Latitude}, longitude={Longitude}, date={Date}", latitude, longitude, date);
             return null;
         }
     }
@@ -119,21 +121,21 @@ public class OpenMeteoWeatherService(HttpClient httpClient) : IWeatherService
         public string[]? Time { get; set; }
 
         [JsonPropertyName("temperature_2m")]
-        public double[]? Temperature2M { get; set; }
+        public double?[]? Temperature2M { get; set; }
 
         [JsonPropertyName("relative_humidity_2m")]
-        public double[]? RelativeHumidity2M { get; set; }
+        public double?[]? RelativeHumidity2M { get; set; }
 
         [JsonPropertyName("wind_speed_10m")]
-        public double[]? WindSpeed10M { get; set; }
+        public double?[]? WindSpeed10M { get; set; }
 
         [JsonPropertyName("wind_direction_10m")]
-        public double[]? WindDirection10M { get; set; }
+        public double?[]? WindDirection10M { get; set; }
 
         [JsonPropertyName("weather_code")]
-        public double[]? WeatherCode { get; set; }
+        public double?[]? WeatherCode { get; set; }
 
         [JsonPropertyName("visibility")]
-        public double[]? Visibility { get; set; }
+        public double?[]? Visibility { get; set; }
     }
 }
