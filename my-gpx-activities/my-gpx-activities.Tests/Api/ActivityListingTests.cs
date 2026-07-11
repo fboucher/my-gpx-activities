@@ -37,6 +37,23 @@ public class ActivityListingTests
             .WaitAsync(DefaultTimeout, cancellationToken);
     }
 
+    [SetUp]
+    public async Task BeforeEachTest()
+    {
+        if (_app != null)
+        {
+            var connectionString = await _app.GetConnectionStringAsync("gpxactivities");
+            if (!string.IsNullOrEmpty(connectionString))
+            {
+                await using var connection = new Npgsql.NpgsqlConnection(connectionString);
+                await connection.OpenAsync();
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = "TRUNCATE TABLE activities CASCADE; TRUNCATE TABLE import_errors CASCADE;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
     [OneTimeTearDown]
     public async Task TearDown()
     {
@@ -118,7 +135,7 @@ public class ActivityListingTests
             return;
         }
 
-        var activityId = idElement.GetInt32();
+        var activityId = idElement.GetGuid();
 
         // GET /api/activities and verify the imported activity appears
         var listResponse = await _httpClient!.GetAsync("/api/activities", cancellationToken);
@@ -199,7 +216,7 @@ public class ActivityListingTests
             return;
         }
 
-        var activityId = idElement.GetInt32();
+        var activityId = idElement.GetGuid();
 
         // GET /api/activities and verify the trainer activity appears
         var listResponse = await _httpClient!.GetAsync("/api/activities", cancellationToken);

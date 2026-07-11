@@ -13,6 +13,19 @@ public interface IActivityRepository
     Task<IEnumerable<SportStatistics>> GetStatisticsBySportAsync();
     Task<IEnumerable<HeatMapActivity>> GetActivitiesForHeatMapAsync(DateOnly? from, DateOnly? to, string[]? sportTypes);
     Task<GlobalStatistics> GetGlobalStatisticsAsync();
+
+    // Weather
+    Task UpdateWeatherDataAsync(Guid activityId, string? weatherDataJson);
+
+    // Best segments
+    Task SaveBestSegmentsAsync(IEnumerable<BestSegment> segments);
+    Task<IEnumerable<BestSegment>> GetBestSegmentsByActivityIdAsync(Guid activityId);
+
+    // Records
+    Task<IEnumerable<ActivityRecord>> GetAllRecordsAsync(string? activityType = null);
+    Task UpsertRecordAsync(ActivityRecord record);
+    Task DeleteRecordsForActivityAsync(Guid activityId);
+    Task RecalculateRecordsAsync(string? activityType = null);
 }
 
 public interface IActivityTypeRepository

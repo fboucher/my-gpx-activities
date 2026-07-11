@@ -31,6 +31,11 @@ public class AppVersionService : IAppVersionService
             build = runId[..Math.Min(10, runId.Length)];
         }
 
+        if (build.Length > 5)
+        {
+            build = build[..5];
+        }
+
         return new AppVersionInfo(version, build);
     }
 }

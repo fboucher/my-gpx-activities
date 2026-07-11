@@ -1,9 +1,11 @@
 using System.Text.Json;
+using Dapper;
 using my_gpx_activities.ApiService.Data;
 using my_gpx_activities.ApiService.Models;
 using my_gpx_activities.ApiService.Models.Merge;
 using my_gpx_activities.ApiService.Models.Strava;
 using my_gpx_activities.ApiService.Services;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,6 +26,11 @@ builder.Services.AddScoped<IFitParserService, FitParserService>();
 builder.Services.AddScoped<ISmartMergeService, SmartMergeService>();
 builder.Services.AddScoped<IStravaImportService, StravaImportService>();
 builder.Services.AddScoped<IActivityMergeService, ActivityMergeService>();
+builder.Services.AddScoped<IBestSegmentService, BestSegmentService>();
+builder.Services.AddHttpClient<IWeatherService, OpenMeteoWeatherService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -42,6 +49,43 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+async Task PostImportProcessing(Guid activityId, string activityType, List<double?[]> pointsData,
+    IWeatherService weatherService, IBestSegmentService bestSegmentService, IActivityRepository activityRepository,
+    ILogger logger)
+{
+    try
+    {
+        var firstPoint = pointsData.FirstOrDefault(p => p.Length > 1 && p[0].HasValue && p[1].HasValue);
+        if (firstPoint != null)
+        {
+            var ts = firstPoint.Length > 4 ? firstPoint[4] : null;
+            var timestamp = ts.HasValue
+                ? DateTimeOffset.FromUnixTimeMilliseconds((long)ts.Value).DateTime
+                : DateTime.UtcNow;
+            var weather = await weatherService.GetWeatherAsync(firstPoint[0]!.Value, firstPoint[1]!.Value, timestamp);
+            if (weather != null)
+            {
+                var weatherJson = JsonSerializer.Serialize(weather);
+                await activityRepository.UpdateWeatherDataAsync(activityId, weatherJson);
+            }
+        }
+
+        var segments = bestSegmentService.ComputeBestSegments(pointsData);
+        if (segments.Count > 0)
+        {
+            foreach (var segment in segments)
+                segment.ActivityId = activityId;
+            await activityRepository.SaveBestSegmentsAsync(segments);
+        }
+
+        await activityRepository.RecalculateRecordsAsync(activityType);
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Post-import processing (weather/segments/records) failed for activity {ActivityId}", activityId);
+    }
+}
+
 app.MapGet("/", () => "GPX Activities API is running. Use /api endpoints for activity management.");
 
 app.MapGet("/api/activity-types", async (IActivityTypeRepository repository) =>
@@ -51,7 +95,8 @@ app.MapGet("/api/activity-types", async (IActivityTypeRepository repository) =>
 })
 .WithName("GetActivityTypes");
 
-app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserService gpxParser, IFitParserService fitParser, IActivityRepository activityRepository) =>
+app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserService gpxParser, IFitParserService fitParser,
+    IActivityRepository activityRepository, IWeatherService weatherService, IBestSegmentService bestSegmentService) =>
 {
     try
     {
@@ -72,6 +117,7 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
         }
 
         Activity? activity;
+        List<double?[]> trackData;
 
         if (isGpx)
         {
@@ -82,7 +128,7 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
                 .Select(tp => new[] { tp.Latitude, tp.Longitude })
                 .ToList();
 
-            var trackData = activityData.TrackPoints
+            trackData = activityData.TrackPoints
                 .Select(tp => new double?[]
                 {
                     tp.Latitude,
@@ -113,6 +159,7 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
             };
 
             await activityRepository.CreateActivityAsync(activity);
+            await PostImportProcessing(activity.Id, activity.ActivityType, trackData, weatherService, bestSegmentService, activityRepository, app.Logger);
         }
         else // FIT
         {
@@ -124,7 +171,7 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
                 .Select(p => new[] { p.Latitude!.Value, p.Longitude!.Value })
                 .ToList();
 
-            var trackData = fitPoints
+            trackData = fitPoints
                 .Select(p => new double?[]
                 {
                     p.Latitude,
@@ -159,6 +206,7 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
             };
 
             await activityRepository.CreateActivityAsync(activity);
+            await PostImportProcessing(activity.Id, activity.ActivityType, trackData, weatherService, bestSegmentService, activityRepository, app.Logger);
         }
 
         var response = new
@@ -187,7 +235,8 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
 })
 .WithName("ImportGpxActivity");
 
-app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxParserService gpxParser, IFitParserService fitParser, IActivityRepository activityRepository) =>
+app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxParserService gpxParser, IFitParserService fitParser,
+    IActivityRepository activityRepository, IWeatherService weatherService, IBestSegmentService bestSegmentService) =>
 {
     try
     {
@@ -241,7 +290,8 @@ app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxPars
                             tp.Longitude,
                             tp.Elevation,
                             tp.HeartRate,
-                            tp.Time.HasValue ? (double?)new DateTimeOffset(tp.Time.Value).ToUnixTimeMilliseconds() : null
+                            tp.Time.HasValue ? (double?)new DateTimeOffset(tp.Time.Value).ToUnixTimeMilliseconds() : null,
+                            tp.Cadence
                         })
                         .ToList();
 
@@ -308,6 +358,7 @@ app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxPars
                 }
 
                 await activityRepository.CreateActivityAsync(activity);
+                await PostImportProcessing(activity.Id, activity.ActivityType, trackData!, weatherService, bestSegmentService, activityRepository, app.Logger);
 
                 var activityResponse = new
                 {
@@ -400,7 +451,8 @@ app.MapPost("/api/activities/smart-merge", async (HttpRequest request, ISmartMer
 .WithName("SmartMergeGpxFit")
 .WithDescription("Merge a GPX file with a FIT file, enriching trackpoints with heart-rate data matched by timestamp.");
 
-app.MapPost("/api/activities/smart-merge/import", async (HttpRequest request, ISmartMergeService smartMerge, IGpxParserService gpxParser, IActivityRepository activityRepository) =>
+app.MapPost("/api/activities/smart-merge/import", async (HttpRequest request, ISmartMergeService smartMerge, IGpxParserService gpxParser,
+    IActivityRepository activityRepository, IWeatherService weatherService, IBestSegmentService bestSegmentService) =>
 {
     try
     {
@@ -463,6 +515,7 @@ app.MapPost("/api/activities/smart-merge/import", async (HttpRequest request, IS
         };
 
         await activityRepository.CreateActivityAsync(activity);
+        await PostImportProcessing(activity.Id, activity.ActivityType, trackData, weatherService, bestSegmentService, activityRepository, app.Logger);
 
         var response = new
         {
@@ -501,12 +554,24 @@ app.MapPost("/api/activities/smart-merge/import", async (HttpRequest request, IS
 app.MapPost("/api/activities/import/strava", async (
     StravaImportRequest request,
     IStravaImportService stravaImportService,
+    IWeatherService weatherService,
+    IBestSegmentService bestSegmentService,
+    IActivityRepository activityRepository,
     Npgsql.NpgsqlDataSource dataSource) =>
 {
     try
     {
         await using var conn = await dataSource.OpenConnectionAsync();
         var result = await stravaImportService.ImportAsync(request.Activity, request.Streams, conn);
+
+        if (result.IsSuccess && result.TrackData != null && result.TrackData.Count > 0 && result.ActivityId.HasValue)
+        {
+            await PostImportProcessing(
+                result.ActivityId.Value,
+                result.ActivityType ?? "Unknown",
+                result.TrackData,
+                weatherService, bestSegmentService, activityRepository, app.Logger);
+        }
 
         if (result.IsSuccess)
         {
@@ -550,13 +615,43 @@ app.MapGet("/api/activities", async (IActivityRepository repository) =>
 })
 .WithName("GetActivities");
 
-app.MapGet("/api/activities/{id}", async (Guid id, IActivityRepository repository) =>
+app.MapGet("/api/activities/{id}", async (Guid id, IActivityRepository repository, IWeatherService weatherService) =>
 {
     var activity = await repository.GetActivityByIdAsync(id);
 
     if (activity == null)
     {
         return Results.NotFound();
+    }
+
+    // Lazy backfill weather data for activities imported before this feature
+    if (string.IsNullOrEmpty(activity.WeatherDataJson) && activity.TrackDataJson != null)
+    {
+        try
+        {
+            var backfillTrackData = JsonSerializer.Deserialize<List<double?[]>>(activity.TrackDataJson);
+            if (backfillTrackData != null)
+            {
+                var firstPoint = backfillTrackData.FirstOrDefault(p => p.Length > 1 && p[0].HasValue && p[1].HasValue);
+                if (firstPoint != null)
+                {
+                    var ts = firstPoint.Length > 4 ? firstPoint[4] : null;
+                    var timestamp = ts.HasValue
+                        ? DateTimeOffset.FromUnixTimeMilliseconds((long)ts.Value).DateTime
+                        : DateTime.UtcNow;
+                    var weather = await weatherService.GetWeatherAsync(firstPoint[0]!.Value, firstPoint[1]!.Value, timestamp);
+                    if (weather != null)
+                    {
+                        activity.WeatherDataJson = JsonSerializer.Serialize(weather);
+                        await repository.UpdateWeatherDataAsync(activity.Id, activity.WeatherDataJson);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Weather backfill failed for activity {ActivityId}", id);
+        }
     }
 
     List<double[]>? trackCoordinates = null;
@@ -569,6 +664,12 @@ app.MapGet("/api/activities/{id}", async (Guid id, IActivityRepository repositor
     if (!string.IsNullOrEmpty(activity.TrackDataJson))
     {
         trackData = JsonSerializer.Deserialize<List<double?[]>>(activity.TrackDataJson);
+    }
+
+    WeatherRecord? weatherData = null;
+    if (!string.IsNullOrEmpty(activity.WeatherDataJson))
+    {
+        weatherData = JsonSerializer.Deserialize<WeatherRecord>(activity.WeatherDataJson);
     }
 
     var response = new
@@ -586,7 +687,8 @@ app.MapGet("/api/activities/{id}", async (Guid id, IActivityRepository repositor
         TrackPoints = activity.TrackPointCount,
         activity.CreatedAt,
         TrackCoordinates = trackCoordinates,
-        TrackData = trackData
+        TrackData = trackData,
+        Weather = weatherData
     };
 
     return Results.Ok(response);
@@ -717,6 +819,59 @@ app.MapPost("/api/activities/merge", async (MergeRequest request, IActivityMerge
 })
 .WithName("MergeActivities")
 .WithDescription("Merge two activities into a new standalone activity using append (concatenate) or merge (overlapping) mode");
+
+app.MapGet("/api/activities/{id}/weather", async (Guid id, IActivityRepository repository, IWeatherService weatherService) =>
+{
+    var activity = await repository.GetActivityByIdAsync(id);
+    if (activity == null) return Results.NotFound();
+
+    if (!string.IsNullOrEmpty(activity.WeatherDataJson))
+    {
+        var weather = JsonSerializer.Deserialize<WeatherRecord>(activity.WeatherDataJson);
+        return Results.Ok(weather);
+    }
+
+    // Lazy fetch if missing
+    if (activity.TrackDataJson != null)
+    {
+        var trackData = JsonSerializer.Deserialize<List<double?[]>>(activity.TrackDataJson);
+        var firstPoint = trackData?.FirstOrDefault(p => p is { Length: > 1 } && p[0].HasValue && p[1].HasValue);
+        if (firstPoint != null)
+        {
+            var ts = firstPoint.Length > 4 ? firstPoint[4] : null;
+            var timestamp = ts.HasValue
+                ? DateTimeOffset.FromUnixTimeMilliseconds((long)ts.Value).DateTime
+                : DateTime.UtcNow;
+            var weather = await weatherService.GetWeatherAsync(firstPoint[0]!.Value, firstPoint[1]!.Value, timestamp);
+            if (weather != null)
+            {
+                var weatherJson = JsonSerializer.Serialize(weather);
+                await repository.UpdateWeatherDataAsync(activity.Id, weatherJson);
+                return Results.Ok(weather);
+            }
+        }
+    }
+
+    return Results.Ok((object?)null);
+})
+.WithName("GetActivityWeather")
+.WithDescription("Get weather data for an activity, with lazy backfill if not yet fetched");
+
+app.MapGet("/api/activities/{id}/best-segments", async (Guid id, IActivityRepository repository) =>
+{
+    var segments = await repository.GetBestSegmentsByActivityIdAsync(id);
+    return Results.Ok(segments);
+})
+.WithName("GetActivityBestSegments")
+.WithDescription("Get best segments (fastest 1/5/10 km) for an activity");
+
+app.MapGet("/api/records", async (string? activityType, IActivityRepository repository) =>
+{
+    var records = await repository.GetAllRecordsAsync(activityType);
+    return Results.Ok(records);
+})
+.WithName("GetRecords")
+.WithDescription("Get personal records, optionally filtered by activity type");
 
 app.MapDefaultEndpoints();
 
