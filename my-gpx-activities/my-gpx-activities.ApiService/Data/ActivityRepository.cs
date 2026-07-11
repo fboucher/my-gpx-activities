@@ -33,6 +33,7 @@ public class ActivityRepository : IActivityRepository
                 track_point_count,
                 track_coordinates_json,
                 track_data_json,
+                weather_data,
                 created_at
             FROM activities
             ORDER BY start_date_time DESC
@@ -60,6 +61,7 @@ public class ActivityRepository : IActivityRepository
                 track_point_count,
                 track_coordinates_json,
                 track_data_json,
+                weather_data,
                 created_at
             FROM activities
             WHERE id = @Id
@@ -87,6 +89,7 @@ public class ActivityRepository : IActivityRepository
                 track_point_count,
                 track_coordinates_json,
                 track_data_json,
+                weather_data,
                 created_at
             ) VALUES (
                 @Id,
@@ -102,6 +105,7 @@ public class ActivityRepository : IActivityRepository
                 @TrackPointCount,
                 @TrackCoordinatesJson::jsonb,
                 @TrackDataJson::jsonb,
+                @WeatherDataJson::jsonb,
                 @CreatedAt
             )
             RETURNING id
@@ -120,6 +124,7 @@ public class ActivityRepository : IActivityRepository
                 activity.TrackPointCount,
                 activity.TrackCoordinatesJson,
                 activity.TrackDataJson,
+                activity.WeatherDataJson,
                 activity.CreatedAt
             });
 
@@ -143,7 +148,8 @@ public class ActivityRepository : IActivityRepository
                 max_speed_ms = @MaxSpeedMs,
                 track_point_count = @TrackPointCount,
                 track_coordinates_json = @TrackCoordinatesJson::jsonb,
-                track_data_json = @TrackDataJson::jsonb
+                track_data_json = @TrackDataJson::jsonb,
+                weather_data = @WeatherDataJson::jsonb
             WHERE id = @Id
             """, new
             {
@@ -159,7 +165,8 @@ public class ActivityRepository : IActivityRepository
                 activity.MaxSpeedMs,
                 activity.TrackPointCount,
                 activity.TrackCoordinatesJson,
-                activity.TrackDataJson
+                activity.TrackDataJson,
+                activity.WeatherDataJson
             });
 
         return rowsAffected > 0;
@@ -208,6 +215,7 @@ public class ActivityRepository : IActivityRepository
                 track_point_count,
                 track_coordinates_json,
                 track_data_json,
+                weather_data,
                 created_at
             """, new { Id = id, Title = titleValue, ActivityType = activityTypeValue });
 
@@ -343,6 +351,148 @@ public class ActivityRepository : IActivityRepository
         return new GlobalStatistics(currentWeekStreak, longestStreak, activityDaysByWeek, activityDaysByMonth, yearRecap, sportCounts);
     }
 
+    public async Task UpdateWeatherDataAsync(Guid activityId, string? weatherDataJson)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync();
+        await connection.ExecuteAsync("""
+            UPDATE activities SET weather_data = @WeatherDataJson::jsonb WHERE id = @Id
+            """, new { Id = activityId, WeatherDataJson = weatherDataJson });
+    }
+
+    public async Task SaveBestSegmentsAsync(IEnumerable<BestSegment> segments)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync();
+        foreach (var segment in segments)
+        {
+            await connection.ExecuteAsync("""
+                INSERT INTO activity_best_segments (id, activity_id, distance_meters, speed_ms, total_time_seconds, start_track_point_index, end_track_point_index, created_at)
+                VALUES (@Id, @ActivityId, @DistanceMeters, @SpeedMs, @TotalTimeSeconds, @StartTrackPointIndex, @EndTrackPointIndex, @CreatedAt)
+                ON CONFLICT DO NOTHING
+                """, segment);
+        }
+    }
+
+    public async Task<IEnumerable<BestSegment>> GetBestSegmentsByActivityIdAsync(Guid activityId)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync();
+        return await connection.QueryAsync<BestSegment>("""
+            SELECT id, activity_id AS ActivityId, distance_meters AS DistanceMeters, speed_ms AS SpeedMs,
+                   total_time_seconds AS TotalTimeSeconds, start_track_point_index AS StartTrackPointIndex,
+                   end_track_point_index AS EndTrackPointIndex, created_at AS CreatedAt
+            FROM activity_best_segments
+            WHERE activity_id = @ActivityId
+            ORDER BY distance_meters
+            """, new { ActivityId = activityId });
+    }
+
+    public async Task<IEnumerable<ActivityRecord>> GetAllRecordsAsync(string? activityType = null)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync();
+        var sql = """
+            SELECT id, activity_id AS ActivityId, activity_type AS ActivityType, metric, value, year,
+                   achieved_at AS AchievedAt, created_at AS CreatedAt
+            FROM activity_records
+            """;
+        if (!string.IsNullOrEmpty(activityType))
+            sql += " WHERE activity_type = @ActivityType";
+        sql += " ORDER BY activity_type, metric, year NULLS LAST";
+
+        return await connection.QueryAsync<ActivityRecord>(sql, new { ActivityType = activityType });
+    }
+
+    public async Task UpsertRecordAsync(ActivityRecord record)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync();
+        await connection.ExecuteAsync("""
+            INSERT INTO activity_records (id, activity_id, activity_type, metric, value, year, achieved_at, created_at)
+            VALUES (@Id, @ActivityId, @ActivityType, @Metric, @Value, @Year, @AchievedAt, @CreatedAt)
+            ON CONFLICT (activity_type, metric, year)
+            DO UPDATE SET activity_id = @ActivityId, value = @Value, achieved_at = @AchievedAt, created_at = @CreatedAt
+            """, record);
+    }
+
+    public async Task DeleteRecordsForActivityAsync(Guid activityId)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync();
+        await connection.ExecuteAsync("DELETE FROM activity_records WHERE activity_id = @ActivityId",
+            new { ActivityId = activityId });
+    }
+
+    public async Task RecalculateRecordsAsync(string? activityType = null)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync();
+        var metrics = new[] { "max_speed_ms", "distance_meters", "elevation_gain_meters" };
+        var durationExpr = "EXTRACT(EPOCH FROM (end_date_time - start_date_time))";
+
+        foreach (var metric in metrics)
+        {
+            var valueCol = metric;
+            var metricName = metric switch
+            {
+                "max_speed_ms" => "MaxSpeed",
+                "distance_meters" => "Distance",
+                "elevation_gain_meters" => "ElevationGain",
+                _ => metric
+            };
+
+            var typeFilter = !string.IsNullOrEmpty(activityType) ? " AND activity_type = @ActivityType" : "";
+
+            // All-time records
+            await connection.ExecuteAsync($"""
+                INSERT INTO activity_records (id, activity_id, activity_type, metric, value, year, achieved_at, created_at)
+                SELECT gen_random_uuid(), id, activity_type, @MetricName, {valueCol}, NULL, start_date_time, NOW()
+                FROM activities
+                WHERE {valueCol} = (
+                    SELECT MAX({valueCol}) FROM activities WHERE {valueCol} > 0{typeFilter}
+                ) AND {valueCol} > 0{typeFilter}
+                LIMIT 1
+                ON CONFLICT (activity_type, metric, year)
+                DO UPDATE SET activity_id = EXCLUDED.activity_id, value = EXCLUDED.value, achieved_at = EXCLUDED.achieved_at
+                """, new { MetricName = metricName, ActivityType = activityType });
+
+            // Yearly records
+            await connection.ExecuteAsync($"""
+                INSERT INTO activity_records (id, activity_id, activity_type, metric, value, year, achieved_at, created_at)
+                SELECT DISTINCT ON (activity_type, EXTRACT(YEAR FROM start_date_time))
+                    gen_random_uuid(), id, activity_type, @MetricName, {valueCol},
+                    EXTRACT(YEAR FROM start_date_time)::int, start_date_time, NOW()
+                FROM activities
+                WHERE {valueCol} > 0{typeFilter}
+                ORDER BY activity_type, EXTRACT(YEAR FROM start_date_time), {valueCol} DESC
+                ON CONFLICT (activity_type, metric, year)
+                DO UPDATE SET activity_id = EXCLUDED.activity_id, value = EXCLUDED.value, achieved_at = EXCLUDED.achieved_at
+                """, new { MetricName = metricName, ActivityType = activityType });
+        }
+
+        // Duration records (special handling)
+        var durationMetric = "Duration";
+        var durationTypeFilter = !string.IsNullOrEmpty(activityType) ? " AND activity_type = @ActivityType2" : "";
+
+        await connection.ExecuteAsync($"""
+            INSERT INTO activity_records (id, activity_id, activity_type, metric, value, year, achieved_at, created_at)
+            SELECT gen_random_uuid(), id, activity_type, @MetricName, {durationExpr}, NULL, start_date_time, NOW()
+            FROM activities
+            WHERE {durationExpr} = (
+                SELECT MAX({durationExpr}) FROM activities WHERE {durationExpr} > 0{durationTypeFilter}
+            ) AND {durationExpr} > 0{durationTypeFilter}
+            LIMIT 1
+            ON CONFLICT (activity_type, metric, year)
+            DO UPDATE SET activity_id = EXCLUDED.activity_id, value = EXCLUDED.value, achieved_at = EXCLUDED.achieved_at
+            """, new { MetricName = durationMetric, ActivityType2 = activityType });
+
+        await connection.ExecuteAsync($"""
+            INSERT INTO activity_records (id, activity_id, activity_type, metric, value, year, achieved_at, created_at)
+            SELECT DISTINCT ON (activity_type, EXTRACT(YEAR FROM start_date_time))
+                gen_random_uuid(), id, activity_type, @MetricName, {durationExpr},
+                EXTRACT(YEAR FROM start_date_time)::int, start_date_time, NOW()
+            FROM activities
+            WHERE {durationExpr} > 0{durationTypeFilter}
+            ORDER BY activity_type, EXTRACT(YEAR FROM start_date_time), {durationExpr} DESC
+            ON CONFLICT (activity_type, metric, year)
+            DO UPDATE SET activity_id = EXCLUDED.activity_id, value = EXCLUDED.value, achieved_at = EXCLUDED.achieved_at
+            """, new { MetricName = durationMetric, ActivityType2 = activityType });
+    }
+
     private static Activity MapToActivity(ActivityDto dto)
     {
         return new Activity
@@ -360,6 +510,7 @@ public class ActivityRepository : IActivityRepository
             TrackPointCount = dto.Track_Point_Count,
             TrackCoordinatesJson = dto.Track_Coordinates_Json,
             TrackDataJson = dto.Track_Data_Json,
+            WeatherDataJson = dto.Weather_Data,
             CreatedAt = dto.Created_At
         };
     }
@@ -388,6 +539,7 @@ public class ActivityRepository : IActivityRepository
         public int Track_Point_Count { get; set; }
         public string? Track_Coordinates_Json { get; set; }
         public string? Track_Data_Json { get; set; }
+        public string? Weather_Data { get; set; }
         public DateTime Created_At { get; set; }
     }
 

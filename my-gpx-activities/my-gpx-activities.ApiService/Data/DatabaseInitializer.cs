@@ -64,9 +64,10 @@ public class DatabaseInitializer : IDatabaseInitializer
                     );
                     """);
 
-                // Migrate existing tables: add track_data_json if missing
+                // Migrate existing tables: add track_data_json and weather_data if missing
                 await connection.ExecuteAsync("""
                     ALTER TABLE activities ADD COLUMN IF NOT EXISTS track_data_json JSONB;
+                    ALTER TABLE activities ADD COLUMN IF NOT EXISTS weather_data JSONB;
                     """);
 
                 // Create index on activities for faster queries
@@ -84,6 +85,38 @@ public class DatabaseInitializer : IDatabaseInitializer
                         message TEXT,
                         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
                     );
+                    """);
+
+                // Create activity_records table
+                await connection.ExecuteAsync("""
+                    CREATE TABLE IF NOT EXISTS activity_records (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        activity_id UUID NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+                        activity_type VARCHAR(50) NOT NULL,
+                        metric VARCHAR(50) NOT NULL,
+                        value DOUBLE PRECISION NOT NULL,
+                        year INT,
+                        achieved_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        UNIQUE (activity_type, metric, year)
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_records_activity_type ON activity_records(activity_type);
+                    CREATE INDEX IF NOT EXISTS idx_records_activity_id ON activity_records(activity_id);
+                    """);
+
+                // Create activity_best_segments table
+                await connection.ExecuteAsync("""
+                    CREATE TABLE IF NOT EXISTS activity_best_segments (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        activity_id UUID NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+                        distance_meters INT NOT NULL,
+                        speed_ms DOUBLE PRECISION NOT NULL,
+                        total_time_seconds DOUBLE PRECISION NOT NULL,
+                        start_track_point_index INT NOT NULL,
+                        end_track_point_index INT NOT NULL,
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_best_segments_activity_id ON activity_best_segments(activity_id);
                     """);
 
                 // Seed default activity types if none exist

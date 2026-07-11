@@ -221,17 +221,18 @@ public class ActivityMergeTests
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         using var doc = JsonDocument.Parse(json);
 
-        Assert.That(doc.RootElement.TryGetProperty("channels", out var channelsEl), Is.True,
-            "Response should include a 'channels' property");
+        Assert.That(doc.RootElement.TryGetProperty("activityAChannels", out var channelsEl) ||
+                    doc.RootElement.TryGetProperty("ActivityAChannels", out channelsEl), Is.True,
+            "Response should include a 'activityAChannels' property");
         Assert.That(channelsEl.ValueKind, Is.EqualTo(JsonValueKind.Array),
-            "'channels' should be an array");
+            "'activityAChannels' should be an array");
 
         var channelValues = channelsEl.EnumerateArray()
             .Select(c => c.GetString() ?? string.Empty)
             .ToList();
 
         Assert.That(channelValues, Has.Some.Matches<string>(c => c.Equals("GPS", StringComparison.OrdinalIgnoreCase)),
-            "An activity with GPS track data should include 'GPS' in channels");
+            "An activity with GPS track data should include 'GPS' in activityAChannels");
     }
 
     /// <summary>
@@ -273,8 +274,8 @@ public class ActivityMergeTests
 
         var response = await _httpClient!.PostAsJsonAsync("/api/activities/merge", request, cancellationToken);
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK),
-            "Merge should return 200 OK");
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Created),
+            "Merge should return 201 Created");
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         using var doc = JsonDocument.Parse(json);
@@ -307,7 +308,7 @@ public class ActivityMergeTests
         };
 
         var mergeResponse = await _httpClient!.PostAsJsonAsync("/api/activities/merge", request, cancellationToken);
-        Assert.That(mergeResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(mergeResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created));
 
         var mergeJson = await mergeResponse.Content.ReadAsStringAsync(cancellationToken);
         using var mergeDoc = JsonDocument.Parse(mergeJson);
@@ -353,8 +354,8 @@ public class ActivityMergeTests
         };
 
         var mergeResponse = await _httpClient!.PostAsJsonAsync("/api/activities/merge", request, cancellationToken);
-        Assert.That(mergeResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK),
-            "Append merge should return 200 OK");
+        Assert.That(mergeResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created),
+            "Append merge should return 201 Created");
 
         var mergeJson = await mergeResponse.Content.ReadAsStringAsync(cancellationToken);
         using var mergeDoc = JsonDocument.Parse(mergeJson);
@@ -410,7 +411,7 @@ public class ActivityMergeTests
         var mergeResponse = await _httpClient!.PostAsJsonAsync("/api/activities/merge", request, cancellationToken);
 
         // The endpoint must accept the gap without returning an error
-        Assert.That(mergeResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK),
+        Assert.That(mergeResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created),
             "Append mode should succeed even when there is a time gap between activities");
 
         var json = await mergeResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -438,7 +439,7 @@ public class ActivityMergeTests
         };
 
         var mergeResponse = await _httpClient!.PostAsJsonAsync("/api/activities/merge", request, cancellationToken);
-        Assert.That(mergeResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(mergeResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created));
 
         var aResponse = await _httpClient!.GetAsync($"/api/activities/{_overlappingActivityAId}", cancellationToken);
         Assert.That(aResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK),
@@ -468,7 +469,7 @@ public class ActivityMergeTests
         };
 
         var mergeResponse = await _httpClient!.PostAsJsonAsync("/api/activities/merge", request, cancellationToken);
-        Assert.That(mergeResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(mergeResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created));
 
         var mergeJson = await mergeResponse.Content.ReadAsStringAsync(cancellationToken);
         using var mergeDoc = JsonDocument.Parse(mergeJson);
@@ -530,11 +531,9 @@ public class ActivityMergeTests
 
         // Import returns { id: <int> } for new activities; { duplicate: true, message } for duplicates.
         // For duplicates we need to look the activity up by Strava external ID.
-        if (doc.RootElement.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.Number)
+        if (doc.RootElement.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String)
         {
-            // The Strava import endpoint returns the internal integer row ID; we need the UUID.
-            // Retrieve the full list and match by the expected name embedded in the request.
-            return await ResolveActivityGuidByStravaIdAsync(requestBody, cancellationToken);
+            return idEl.GetGuid();
         }
 
         // Duplicate path — same lookup

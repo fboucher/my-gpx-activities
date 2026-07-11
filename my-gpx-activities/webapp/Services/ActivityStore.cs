@@ -70,4 +70,39 @@ public class ActivitySummary
     public double? AverageHeartRate { get; set; }
     public double? MaxHeartRate { get; set; }
     public double? Calories { get; set; }
+    public WeatherRecordDto? Weather { get; set; }
+}
+
+public class WeatherRecordDto
+{
+    public double TemperatureCelsius { get; set; }
+    public int WeatherCode { get; set; }
+    public string ConditionText { get; set; } = string.Empty;
+    public double WindSpeedKmh { get; set; }
+    public double WindDirectionDegrees { get; set; }
+    public double HumidityPercent { get; set; }
+    public double VisibilityKm { get; set; }
+    public string WindDirectionText { get; set; } = string.Empty;
+}
+
+public class BestSegmentDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string ActivityId { get; set; } = string.Empty;
+    public int DistanceMeters { get; set; }
+    public double SpeedMs { get; set; }
+    public double TotalTimeSeconds { get; set; }
+    public int StartTrackPointIndex { get; set; }
+    public int EndTrackPointIndex { get; set; }
+}
+
+public class ActivityRecordDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string ActivityId { get; set; } = string.Empty;
+    public string ActivityType { get; set; } = string.Empty;
+    public string Metric { get; set; } = string.Empty;
+    public double Value { get; set; }
+    public int? Year { get; set; }
+    public DateTime AchievedAt { get; set; }
 }

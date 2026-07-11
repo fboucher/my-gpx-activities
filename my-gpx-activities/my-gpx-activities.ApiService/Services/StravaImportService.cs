@@ -113,7 +113,10 @@ public class StravaImportService : IStravaImportService
             });
 
             _logger.LogInformation("Successfully imported Strava activity {StravaId} as {ActivityId}", stravaId, activityId);
-            return ImportResult.Success(activityId);
+            var result = ImportResult.Success(activityId);
+            result.TrackData = trackData;
+            result.ActivityType = activityType;
+            return result;
         }
         catch (Exception ex)
         {

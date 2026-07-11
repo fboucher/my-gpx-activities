@@ -2,6 +2,7 @@
 @using System.Net.Http.Json
 @inject IHttpClientFactory HttpClientFactory
 @inject ISnackbar Snackbar
+@inject webapp.Services.ActivityApiClient ActivityApiClient
 
 <PageTitle>Statistics</PageTitle>
 
@@ -106,6 +107,33 @@ else
             <MudText Typo="Typo.body2">No sport data available.</MudText>
         }
     </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudText Typo="Typo.h5" GutterBottom="true">Personal Records</MudText>
+        @if (_records != null && _records.Any())
+        {
+            <MudTable Items="@_records" Hover="true" Dense="true">
+                <HeaderContent>
+                    <MudTh>Sport</MudTh>
+                    <MudTh>Metric</MudTh>
+                    <MudTh>Value</MudTh>
+                    <MudTh>Scope</MudTh>
+                    <MudTh>Achieved</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Sport">@context.ActivityType</MudTd>
+                    <MudTd DataLabel="Metric">@FormatRecordMetric(context.Metric)</MudTd>
+                    <MudTd DataLabel="Value">@FormatRecordValue(context.Metric, context.Value)</MudTd>
+                    <MudTd DataLabel="Scope">@(context.Year.HasValue ? context.Year.ToString() : "All-Time")</MudTd>
+                    <MudTd DataLabel="Achieved">@context.AchievedAt.ToString("MMM dd, yyyy")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2">No records yet. Import some activities to start tracking.</MudText>
+        }
+    </MudPaper>
 }
 
 @code {
@@ -117,6 +145,7 @@ else
     private double[] _sportData = Array.Empty<double>();
     private string[] _sportLabels = Array.Empty<string>();
     private ChartOptions _chartOptions = new() { YAxisTicks = 1 };
+    private List<ActivityRecordDto> _records = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -125,6 +154,8 @@ else
             using var client = HttpClientFactory.CreateClient("ApiService");
             _globalStats = await client.GetFromJsonAsync<GlobalStatisticsDto>("/api/statistics/global");
             if (_globalStats != null) PrepareChartData();
+
+            _records = await ActivityApiClient.GetRecordsAsync();
         }
         catch (Exception ex)
         {
@@ -136,6 +167,24 @@ else
             _loading = false;
         }
     }
+
+    private string FormatRecordMetric(string metric) => metric switch
+    {
+        "MaxSpeed" => "Max Speed",
+        "Distance" => "Distance",
+        "Duration" => "Duration",
+        "ElevationGain" => "Elevation Gain",
+        _ => metric
+    };
+
+    private string FormatRecordValue(string metric, double value) => metric switch
+    {
+        "MaxSpeed" => $"{value * 3.6:F1} km/h",
+        "Distance" => $"{(value >= 1000 ? $"{value / 1000:F2} km" : $"{value:F0} m")}",
+        "Duration" => $"{TimeSpan.FromSeconds(value):hh\\:mm\\:ss}",
+        "ElevationGain" => $"{value:F0} m",
+        _ => value.ToString("F2")
+    };
 
     private void PrepareChartData()
     {

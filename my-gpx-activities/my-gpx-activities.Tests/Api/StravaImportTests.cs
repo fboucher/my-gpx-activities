@@ -37,6 +37,23 @@ public class StravaImportTests
             .WaitAsync(DefaultTimeout, cancellationToken);
     }
 
+    [SetUp]
+    public async Task BeforeEachTest()
+    {
+        if (_app != null)
+        {
+            var connectionString = await _app.GetConnectionStringAsync("gpxactivities");
+            if (!string.IsNullOrEmpty(connectionString))
+            {
+                await using var connection = new Npgsql.NpgsqlConnection(connectionString);
+                await connection.OpenAsync();
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = "TRUNCATE TABLE activities CASCADE; TRUNCATE TABLE import_errors CASCADE;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
     [OneTimeTearDown]
     public async Task TearDown()
     {
@@ -99,9 +116,9 @@ public class StravaImportTests
 
         if (hasId)
         {
-            // New import should have a numeric ID
-            Assert.That(idElement.ValueKind, Is.EqualTo(JsonValueKind.Number),
-                "Activity ID should be a number");
+            // New import should have a string (GUID) ID
+            Assert.That(idElement.ValueKind, Is.EqualTo(JsonValueKind.String),
+                "Activity ID should be a string (GUID)");
         }
     }
 
@@ -151,8 +168,8 @@ public class StravaImportTests
 
         if (hasId)
         {
-            Assert.That(idElement.ValueKind, Is.EqualTo(JsonValueKind.Number),
-                "Activity ID should be a number");
+            Assert.That(idElement.ValueKind, Is.EqualTo(JsonValueKind.String),
+                "Activity ID should be a string (GUID)");
         }
     }
 
@@ -261,7 +278,7 @@ public class StravaImportTests
         // The test should still pass as long as the import succeeded
         if (hasId && !hasDuplicate)
         {
-            Assert.That(idElement.ValueKind, Is.EqualTo(JsonValueKind.Number),
+            Assert.That(idElement.ValueKind, Is.EqualTo(JsonValueKind.String),
                 "NordicSki activity should be saved with an ID");
             
             // Note: To fully verify the activity type mapping, we would need to:
@@ -312,7 +329,7 @@ public class StravaImportTests
 
         if (hasId && !hasDuplicate)
         {
-            Assert.That(idElement.ValueKind, Is.EqualTo(JsonValueKind.Number),
+            Assert.That(idElement.ValueKind, Is.EqualTo(JsonValueKind.String),
                 "VirtualRide activity should be saved with an ID");
         }
     }
@@ -363,8 +380,8 @@ public class StravaImportTests
 
         if (hasId)
         {
-            Assert.That(idElement.ValueKind, Is.EqualTo(JsonValueKind.Number),
-                "Activity ID should be a number");
+            Assert.That(idElement.ValueKind, Is.EqualTo(JsonValueKind.String),
+                "Activity ID should be a string (GUID)");
         }
     }
 
@@ -421,7 +438,7 @@ public class StravaImportTests
         Assert.That(hasId, Is.True,
             "Response should contain an 'id' property");
 
-        var activityId = idElement.GetInt32();
+        var activityId = idElement.GetGuid();
 
         // Now GET the activity to verify trackData contains heart rate
         var getResponse = await _httpClient!.GetAsync($"/api/activities/{activityId}", cancellationToken);
@@ -440,16 +457,10 @@ public class StravaImportTests
         Assert.That(trackDataElement.ValueKind, Is.Not.EqualTo(JsonValueKind.Null),
             "trackData should not be null");
 
-        // Parse trackData JSON string
-        var trackDataJson = trackDataElement.GetString();
-        Assert.That(trackDataJson, Is.Not.Null.And.Not.Empty,
-            "trackData JSON should not be empty");
-
-        using var trackDataDoc = JsonDocument.Parse(trackDataJson!);
-        Assert.That(trackDataDoc.RootElement.ValueKind, Is.EqualTo(JsonValueKind.Array),
+        Assert.That(trackDataElement.ValueKind, Is.EqualTo(JsonValueKind.Array),
             "trackData should be an array");
 
-        var trackPoints = trackDataDoc.RootElement;
+        var trackPoints = trackDataElement;
         Assert.That(trackPoints.GetArrayLength(), Is.GreaterThan(0),
             "trackData should contain track points");
 
@@ -516,7 +527,7 @@ public class StravaImportTests
         var hasId = doc.RootElement.TryGetProperty("id", out var idElement);
         Assert.That(hasId, Is.True);
 
-        var activityId = idElement.GetInt32();
+        var activityId = idElement.GetGuid();
 
         // GET the activity and verify trackCoordinates
         var getResponse = await _httpClient!.GetAsync($"/api/activities/{activityId}", cancellationToken);
@@ -533,6 +544,7 @@ public class StravaImportTests
         {
             // If property exists, it should be null or an empty array
             var isNullOrEmpty = trackCoordsElement.ValueKind == JsonValueKind.Null ||
+                               (trackCoordsElement.ValueKind == JsonValueKind.Array && trackCoordsElement.GetArrayLength() == 0) ||
                                (trackCoordsElement.ValueKind == JsonValueKind.String && 
                                 (string.IsNullOrEmpty(trackCoordsElement.GetString()) || 
                                  trackCoordsElement.GetString() == "[]"));
@@ -603,7 +615,7 @@ public class StravaImportTests
         Assert.That(hasId, Is.True,
             "Response should contain an 'id' property");
 
-        var activityId = idElement.GetInt32();
+        var activityId = idElement.GetGuid();
 
         // GET the activity to verify GPS data
         var getResponse = await _httpClient!.GetAsync($"/api/activities/{activityId}", cancellationToken);
@@ -622,16 +634,10 @@ public class StravaImportTests
         Assert.That(trackCoordsElement.ValueKind, Is.Not.EqualTo(JsonValueKind.Null),
             "trackCoordinates should not be null for GPS activities");
 
-        // Parse trackCoordinates JSON string
-        var trackCoordsJson = trackCoordsElement.GetString();
-        Assert.That(trackCoordsJson, Is.Not.Null.And.Not.Empty,
-            "trackCoordinates JSON should not be empty");
-
-        using var trackCoordsDoc = JsonDocument.Parse(trackCoordsJson!);
-        Assert.That(trackCoordsDoc.RootElement.ValueKind, Is.EqualTo(JsonValueKind.Array),
+        Assert.That(trackCoordsElement.ValueKind, Is.EqualTo(JsonValueKind.Array),
             "trackCoordinates should be an array");
 
-        var coordinates = trackCoordsDoc.RootElement;
+        var coordinates = trackCoordsElement;
         Assert.That(coordinates.GetArrayLength(), Is.GreaterThan(0),
             "trackCoordinates should contain GPS points");
 
@@ -645,9 +651,7 @@ public class StravaImportTests
             "trackData should not be null");
 
         // Parse trackData and verify at least one point has non-null lat/lon (indices 0, 1)
-        var trackDataJson = trackDataElement.GetString();
-        using var trackDataDoc = JsonDocument.Parse(trackDataJson!);
-        var trackPoints = trackDataDoc.RootElement;
+        var trackPoints = trackDataElement;
 
         var hasGpsPoint = false;
         foreach (var point in trackPoints.EnumerateArray())
