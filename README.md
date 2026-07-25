@@ -20,6 +20,24 @@ A .NET 10 Aspire application for managing personal GPX files. Upload, view, and 
 - Heart rate and cadence data support with FIT file merging
 - Database persistence with PostgreSQL
 
+## Screenshots
+
+| Home | Activities |
+|:---:|:---:|
+| ![Home](screenshots/home.png) | ![Activities](screenshots/activities.png) |
+
+| Activity Detail | Statistics |
+|:---:|:---:|
+| ![Activity Detail](screenshots/activity-detail.png) | ![Statistics](screenshots/statistics.png) |
+
+| Heat Map | Import |
+|:---:|:---:|
+| ![Heat Map](screenshots/heatmap.png) | ![Import](screenshots/import.png) |
+
+| Merge |
+|:---:|
+| ![Merge](screenshots/merge.png) |
+
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
