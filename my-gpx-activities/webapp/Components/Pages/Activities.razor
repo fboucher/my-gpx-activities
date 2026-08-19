@@ -105,13 +105,20 @@ else
 
             <TemplateColumn Title="Actions">
                 <CellTemplate>
-                    <MudButton Variant="Variant.Text"
-                              Color="Color.Primary"
-                              Size="Size.Small"
-                              Href="@($"/activities/{context.Item.Id}")">
-                        <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" />
-                        View
-                    </MudButton>
+                    <MudStack Row="true" Spacing="1">
+                        <MudButton Variant="Variant.Text"
+                                  Color="Color.Primary"
+                                  Size="Size.Small"
+                                  Href="@($"/activities/{context.Item.Id}")">
+                            <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" />
+                            View
+                        </MudButton>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                       Size="Size.Small"
+                                       Color="Color.Error"
+                                       aria-label="Delete activity"
+                                       OnClick="@(() => HandleDeleteAsync(context.Item))" />
+                    </MudStack>
                 </CellTemplate>
             </TemplateColumn>
 
@@ -178,6 +185,7 @@ else
 @inject webapp.Services.ActivityStore ActivityStore
 @inject webapp.Services.ActivityApiClient ActivityApiClient
 @inject NavigationManager NavigationManager
+@inject MudBlazor.IDialogService DialogService
 
 @code {
     private List<webapp.Services.ActivitySummary>? activities;
@@ -197,6 +205,24 @@ else
     {
         var ids = selectedIds.ToArray();
         NavigationManager.NavigateTo($"/merge?a={ids[0]}&b={ids[1]}");
+    }
+
+    private async Task HandleDeleteAsync(webapp.Services.ActivitySummary activity)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Activity",
+            $"Are you sure you want to delete \"{activity.Title}\"? This cannot be undone.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed != true) return;
+
+        var deleted = await ActivityApiClient.DeleteActivityAsync(activity.Id);
+        if (deleted)
+        {
+            ActivityStore.Remove(activity.Id);
+            activities = ActivityStore.Activities.OrderByDescending(a => a.StartDateTime).ToList();
+            StateHasChanged();
+        }
     }
 
     private IEnumerable<webapp.Services.ActivitySummary> FilteredActivities
