@@ -34,6 +34,13 @@ public interface IGpxParserService
 
 public class GpxParserService : IGpxParserService
 {
+    private readonly IActivityMetricsService _metricsService;
+
+    public GpxParserService(IActivityMetricsService metricsService)
+    {
+        _metricsService = metricsService;
+    }
+
     public async Task<GpxActivityData> ParseGpxAsync(Stream gpxStream)
     {
         using var reader = new StreamReader(gpxStream);
@@ -150,42 +157,11 @@ public class GpxParserService : IGpxParserService
         var startTime = validPoints.First().Time!.Value;
         var endTime = validPoints.Last().Time!.Value;
 
-        double totalDistance = 0;
-        for (int i = 1; i < validPoints.Count; i++)
-        {
-            var prev = validPoints[i - 1];
-            var curr = validPoints[i];
-            totalDistance += CalculateDistance(prev.Latitude, prev.Longitude, curr.Latitude, curr.Longitude);
-        }
-
-        double elevationGain = 0;
-        double elevationLoss = 0;
-        for (int i = 1; i < validPoints.Count; i++)
-        {
-            var prev = validPoints[i - 1];
-            var curr = validPoints[i];
-
-            if (prev.Elevation.HasValue && curr.Elevation.HasValue)
-            {
-                var elevationDiff = curr.Elevation.Value - prev.Elevation.Value;
-                if (elevationDiff > 0)
-                    elevationGain += elevationDiff;
-                else
-                    elevationLoss += Math.Abs(elevationDiff);
-            }
-        }
-
-        var duration = endTime - startTime;
-        var averageSpeed = totalDistance / duration.TotalSeconds;
-        var maxSpeed = validPoints.Any(p => p.Time.HasValue)
-            ? validPoints.Zip(validPoints.Skip(1), (a, b) =>
-            {
-                if (!a.Time.HasValue || !b.Time.HasValue) return 0.0;
-                var distance = CalculateDistance(a.Latitude, a.Longitude, b.Latitude, b.Longitude);
-                var timeDiff = (b.Time.Value - a.Time.Value).TotalSeconds;
-                return timeDiff > 0 ? distance / timeDiff : 0.0;
-            }).Max()
-            : 0.0;
+        var metrics = _metricsService.CalculateMetrics(
+            validPoints.Select(p => p.Latitude).ToList(),
+            validPoints.Select(p => p.Longitude).ToList(),
+            validPoints.Select(p => p.Elevation).ToList(),
+            validPoints.Select(p => p.Time!.Value).ToList());
 
         return new GpxActivityData
         {
@@ -193,26 +169,12 @@ public class GpxParserService : IGpxParserService
             StartDateTime = startTime,
             EndDateTime = endTime,
             ActivityType = activityType,
-            DistanceMeters = totalDistance,
-            ElevationGainMeters = elevationGain,
-            ElevationLossMeters = elevationLoss,
-            AverageSpeedMs = averageSpeed,
-            MaxSpeedMs = maxSpeed,
+            DistanceMeters = metrics.DistanceMeters,
+            ElevationGainMeters = metrics.ElevationGainMeters,
+            ElevationLossMeters = metrics.ElevationLossMeters,
+            AverageSpeedMs = metrics.AverageSpeedMs,
+            MaxSpeedMs = metrics.MaxSpeedMs,
             TrackPoints = trackPoints
         };
     }
-
-    private double CalculateDistance(double lat1, double lon1, double lat2, double lon2)
-    {
-        const double R = 6371000;
-        var dLat = ToRadians(lat2 - lat1);
-        var dLon = ToRadians(lon2 - lon1);
-        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                Math.Cos(ToRadians(lat1)) * Math.Cos(ToRadians(lat2)) *
-                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-        return R * c;
-    }
-
-    private double ToRadians(double degrees) => degrees * Math.PI / 180;
 }

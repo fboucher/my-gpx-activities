@@ -21,6 +21,7 @@ builder.Services.AddScoped<IDatabaseConnectionFactory, DatabaseConnectionFactory
 builder.Services.AddScoped<IDatabaseInitializer, DatabaseInitializer>();
 builder.Services.AddScoped<IActivityRepository, ActivityRepository>();
 builder.Services.AddScoped<IActivityTypeRepository, ActivityTypeRepository>();
+builder.Services.AddScoped<IActivityMetricsService, ActivityMetricsService>();
 builder.Services.AddScoped<IGpxParserService, GpxParserService>();
 builder.Services.AddScoped<IFitParserService, FitParserService>();
 builder.Services.AddScoped<ISmartMergeService, SmartMergeService>();
@@ -96,7 +97,7 @@ app.MapGet("/api/activity-types", async (IActivityTypeRepository repository) =>
 .WithName("GetActivityTypes");
 
 app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserService gpxParser, IFitParserService fitParser,
-    IActivityRepository activityRepository, IWeatherService weatherService, IBestSegmentService bestSegmentService) =>
+    IActivityMetricsService metricsService, IActivityRepository activityRepository, IWeatherService weatherService, IBestSegmentService bestSegmentService) =>
 {
     try
     {
@@ -187,18 +188,32 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
             var last = fitPoints.Last();
             var title = Path.GetFileNameWithoutExtension(file.FileName);
 
+            var validPoints = fitPoints
+                .Where(p => p.Latitude.HasValue && p.Longitude.HasValue)
+                .ToList();
+
+            var metrics = validPoints.Count >= 2
+                ? metricsService.CalculateMetrics(
+                    validPoints.Select(p => p.Latitude!.Value).ToList(),
+                    validPoints.Select(p => p.Longitude!.Value).ToList(),
+                    validPoints.Select(p => p.Elevation).ToList(),
+                    validPoints.Select(p => p.Timestamp).ToList())
+                : new ActivityMetricsResult();
+
+            var activityType = fitPoints.FirstOrDefault(p => p.Sport != null)?.Sport ?? "Unknown";
+
             activity = new Activity
             {
                 Id = Guid.NewGuid(),
                 Title = title,
                 StartDateTime = first.Timestamp,
                 EndDateTime = last.Timestamp,
-                ActivityType = "Unknown",
-                DistanceMeters = 0,
-                ElevationGainMeters = 0,
-                ElevationLossMeters = 0,
-                AverageSpeedMs = 0,
-                MaxSpeedMs = 0,
+                ActivityType = activityType,
+                DistanceMeters = metrics.DistanceMeters,
+                ElevationGainMeters = metrics.ElevationGainMeters,
+                ElevationLossMeters = metrics.ElevationLossMeters,
+                AverageSpeedMs = metrics.AverageSpeedMs,
+                MaxSpeedMs = metrics.MaxSpeedMs,
                 TrackPointCount = fitPoints.Count,
                 TrackCoordinatesJson = JsonSerializer.Serialize(trackCoordinates),
                 TrackDataJson = JsonSerializer.Serialize(trackData),
@@ -236,7 +251,7 @@ app.MapPost("/api/activities/import", async (HttpRequest request, IGpxParserServ
 .WithName("ImportGpxActivity");
 
 app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxParserService gpxParser, IFitParserService fitParser,
-    IActivityRepository activityRepository, IWeatherService weatherService, IBestSegmentService bestSegmentService) =>
+    IActivityMetricsService metricsService, IActivityRepository activityRepository, IWeatherService weatherService, IBestSegmentService bestSegmentService) =>
 {
     try
     {
@@ -338,18 +353,32 @@ app.MapPost("/api/activities/import/batch", async (HttpRequest request, IGpxPars
                     var last = fitPoints.Last();
                     var title = Path.GetFileNameWithoutExtension(file.FileName);
 
+                    var validPoints = fitPoints
+                        .Where(p => p.Latitude.HasValue && p.Longitude.HasValue)
+                        .ToList();
+
+                    var metrics = validPoints.Count >= 2
+                        ? metricsService.CalculateMetrics(
+                            validPoints.Select(p => p.Latitude!.Value).ToList(),
+                            validPoints.Select(p => p.Longitude!.Value).ToList(),
+                            validPoints.Select(p => p.Elevation).ToList(),
+                            validPoints.Select(p => p.Timestamp).ToList())
+                        : new ActivityMetricsResult();
+
+                    var activityType = fitPoints.FirstOrDefault(p => p.Sport != null)?.Sport ?? "Unknown";
+
                     activity = new Activity
                     {
                         Id = Guid.NewGuid(),
                         Title = title,
                         StartDateTime = first.Timestamp,
                         EndDateTime = last.Timestamp,
-                        ActivityType = "Unknown",
-                        DistanceMeters = 0,
-                        ElevationGainMeters = 0,
-                        ElevationLossMeters = 0,
-                        AverageSpeedMs = 0,
-                        MaxSpeedMs = 0,
+                        ActivityType = activityType,
+                        DistanceMeters = metrics.DistanceMeters,
+                        ElevationGainMeters = metrics.ElevationGainMeters,
+                        ElevationLossMeters = metrics.ElevationLossMeters,
+                        AverageSpeedMs = metrics.AverageSpeedMs,
+                        MaxSpeedMs = metrics.MaxSpeedMs,
                         TrackPointCount = fitPoints.Count,
                         TrackCoordinatesJson = JsonSerializer.Serialize(trackCoordinates),
                         TrackDataJson = JsonSerializer.Serialize(trackData),
