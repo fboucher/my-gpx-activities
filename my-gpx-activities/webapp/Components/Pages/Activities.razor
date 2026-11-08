@@ -112,6 +112,12 @@ else
                         <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" />
                         View
                     </MudButton>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                  Color="Color.Error"
+                                  Size="Size.Small"
+                                  title="Delete activity"
+                                  aria-label="Delete activity"
+                                  OnClick="@(() => DeleteActivityAsync(context.Item))" />
                 </CellTemplate>
             </TemplateColumn>
 
@@ -178,6 +184,8 @@ else
 @inject webapp.Services.ActivityStore ActivityStore
 @inject webapp.Services.ActivityApiClient ActivityApiClient
 @inject NavigationManager NavigationManager
+@inject MudBlazor.IDialogService DialogService
+@inject MudBlazor.ISnackbar Snackbar
 
 @code {
     private List<webapp.Services.ActivitySummary>? activities;
@@ -191,6 +199,28 @@ else
             selectedIds.Add(id);
         else
             selectedIds.Remove(id);
+    }
+
+    private async Task DeleteActivityAsync(webapp.Services.ActivitySummary activity)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Activity",
+            $"Are you sure you want to delete \"{activity.Title}\"? This cannot be undone.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed != true) return;
+
+        var deleted = await ActivityApiClient.DeleteActivityAsync(activity.Id);
+        if (!deleted)
+        {
+            Snackbar.Add("Failed to delete the activity. Please try again.", Severity.Error);
+            return;
+        }
+
+        ActivityStore.Remove(activity.Id);
+        selectedIds.Remove(activity.Id);
+        activities?.RemoveAll(a => a.Id == activity.Id);
+        Snackbar.Add("Activity deleted.", Severity.Success);
     }
 
     private void NavigateToMerge()
